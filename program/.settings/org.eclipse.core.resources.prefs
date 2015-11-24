@@ -1,0 +1,4 @@
+eclipse.preferences.version=1
+encoding//src/bugs/__init__.py=utf-8
+encoding//src/bugs/bugsOfFile.py=utf-8
+encoding//src/bugs/collectBugs.py=utf-8

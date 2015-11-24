@@ -1,0 +1,3 @@
+1，ticket 信息的搜集是 关闭的ticket，并且按照类型排序
+2，log信息是按照  git log --stat --pretty=format:'%h : %s' > log.txt格式来搜集的
+3, log所在位置 /E/git/程序名
