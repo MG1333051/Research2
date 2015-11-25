@@ -1,0 +1,2 @@
+1,走读完scipy中所有标签含有defect的patch文件，只有两个文件中修改的地方含有动态特性，分别是setattr一次
+isinstance一次

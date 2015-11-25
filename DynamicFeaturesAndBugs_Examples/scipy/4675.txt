@@ -1,0 +1,247 @@
+From 1dbecec6b552512cc3689fefd0311520837f1dda Mon Sep 17 00:00:00 2001
+From: Clancy Rowley <cwrowley@princeton.edu>
+Date: Sun, 29 Mar 2015 17:35:17 -0400
+Subject: [PATCH 2/5] Rework lsim; fixes #2652 and #1104
+
+The previous implementation of lsim did not work for systems with a pole
+at the origin, or with repeated poles.  This new version fixes all of
+the (known) issues with lsim.
+
+The new implementation uses the matrix exponential, like the old
+implementation, but computes it using linalg.expm instead of by
+diagonalization.  This solves the problem with repeated poles.  In
+addition, the new implementation does not require inv(A) to compute the
+forcing term, and it no longer fails for systems with a pole at the
+origin.  Details of the algorithm are documented in the comments.
+
+Note that there is already an lsim2 routine that fixes the above
+problems.  However, it calls a generic ODE integrator, and can be
+hundreds of times slower than the implementation here.
+
+An important change with the new implementation is that the time vector
+must now be evenly spaced.  Note that this same requirement is in the
+MATLAB version of lsim.  One could modify this to allow for non-uniform
+time samples, but this would slow down the algorithm, because the matrix
+exponential would need to be recomputed whenever the timestep changes.
+In addition, small, machine-precision-level differences in timestep
+might trigger the matrix exponential to be recomputed when it is not
+necessary.  Therefore, the implementation here checks whether timesteps
+are approximately uniform using np.allclose(), and gives an error if
+they are not.
+---
+ scipy/signal/ltisys.py | 156 ++++++++++++++++++++++++++++++-------------------
+ 1 file changed, 96 insertions(+), 60 deletions(-)
+
+diff --git a/scipy/signal/ltisys.py b/scipy/signal/ltisys.py
+index 7c63636..7f45786 100644
+--- a/scipy/signal/ltisys.py
++++ b/scipy/signal/ltisys.py
+@@ -13,6 +13,8 @@
+ #   Rewrote abcd_normalize.
+ # Jan 2015: Irvin Probst irvin DOT probst AT ensta-bretagne DOT fr
+ #   Added pole placement
++# Mar 2015: Clancy Rowley
++#   Rewrote lsim
+ #
+ 
+ import warnings
+@@ -635,10 +637,10 @@ def lsim(system, U, T, X0=None, interp=1):
+         An input array describing the input at each time `T`
+         (interpolation is assumed between given times).  If there are
+         multiple inputs, then each column of the rank-2 array
+-        represents an input.
++        represents an input.  If U = 0 or None, a zero input is used.
+     T : array_like
+         The time steps at which the input is defined and at which the
+-        output is desired.
++        output is desired.  Must be nonnegative, increasing, and equally spaced.
+     X0 : array_like, optional
+         The initial conditions on the state vector (zero by default).
+     interp : {1, 0}, optional
+@@ -658,58 +660,101 @@ def lsim(system, U, T, X0=None, interp=1):
+         sys = system
+     else:
+         sys = lti(*system)
+-    U = atleast_1d(U)
+     T = atleast_1d(T)
+-    if len(U.shape) == 1:
+-        U = U.reshape((U.shape[0], 1))
+-    sU = U.shape
+     if len(T.shape) != 1:
+         raise ValueError("T must be a rank-1 array.")
+-    if sU[0] != len(T):
+-        raise ValueError("U must have the same number of rows "
+-                         "as elements in T.")
+-    if sU[1] != sys.inputs:
+-        raise ValueError("System does not define that many inputs.")
+ 
++    A, B, C, D = (np.asarray(M) for M in (sys.A, sys.B, sys.C, sys.D))
++    n_states = A.shape[0]
++    n_inputs = B.shape[1]
++
++    n_steps = len(T)
+     if X0 is None:
+-        X0 = zeros(sys.B.shape[0], sys.A.dtype)
++        X0 = zeros(n_states, sys.A.dtype)
++    xout = zeros((n_steps, n_states), sys.A.dtype)
++
++    if T[0] == 0:
++        xout[0] = X0
++    elif T[0] > 0:
++        # step forward to initial time, with zero input
++        xout[0] = dot(X0, linalg.expm(transpose(A) * T[0]))
++    else:
++        raise ValueError("Initial time must be nonnegative")
++
++    no_input = (U is None
++                or (isinstance(U, (int, float)) and U == 0.)           #####################isinstance 动态特性
++                or np.allclose(U, 0))
++
++    if n_steps == 1:
++        yout = squeeze(dot(xout, transpose(C)))
++        if not no_input:
++            yout += squeeze(dot(U, transpose(D)))
++        return T, squeeze(yout), squeeze(xout)
+ 
+-    xout = zeros((len(T), sys.B.shape[0]), sys.A.dtype)
+-    xout[0] = X0
+-    A = sys.A
+-    AT, BT = transpose(sys.A), transpose(sys.B)
+     dt = T[1] - T[0]
+-    lam, v = linalg.eig(A)
+-    vt = transpose(v)
+-    vti = linalg.inv(vt)
+-    GT = dot(dot(vti, diag(numpy.exp(dt * lam))), vt)
+-    GT = _cast_to_array_dtype(GT, xout)
+-
+-    ATm1 = linalg.inv(AT)
+-    ATm2 = dot(ATm1, ATm1)
+-    I = eye(A.shape[0], dtype=A.dtype)
+-    GTmI = GT - I
+-    F1T = dot(dot(BT, GTmI), ATm1)
+-    if interp:
+-        F2T = dot(BT, dot(GTmI, ATm2) / dt - ATm1)
+-
+-    for k in xrange(1, len(T)):
+-        dt1 = T[k] - T[k - 1]
+-        if dt1 != dt:
+-            dt = dt1
+-            GT = dot(dot(vti, diag(numpy.exp(dt * lam))), vt)
+-            GT = _cast_to_array_dtype(GT, xout)
+-            GTmI = GT - I
+-            F1T = dot(dot(BT, GTmI), ATm1)
+-            if interp:
+-                F2T = dot(BT, dot(GTmI, ATm2) / dt - ATm1)
+-
+-        xout[k] = dot(xout[k - 1], GT) + dot(U[k - 1], F1T)
+-        if interp:
+-            xout[k] = xout[k] + dot((U[k] - U[k - 1]), F2T)
+-
+-    yout = (squeeze(dot(U, transpose(sys.D))) +
+-            squeeze(dot(xout, transpose(sys.C))))
++    if not np.allclose(T[1:] - T[:-1], dt):
++        raise ValueError("Time values must be equally spaced.")
++
++    if no_input:
++        # Zero input: just use matrix exponential
++        # take transpose because state is a row vector
++        expAT_dt = linalg.expm(transpose(A) * dt)
++        for i in xrange(1, n_steps):
++            xout[i] = dot(xout[i-1], expAT_dt)
++        yout = squeeze(dot(xout, transpose(C)))
++        return T, squeeze(yout), squeeze(xout)
++
++    # Nonzero input
++    U = atleast_1d(U)
++    if len(U.shape) == 1:
++        U = U.reshape((U.shape[0], 1))
++    sU = U.shape
++    if sU[0] != n_steps:
++        raise ValueError("U must have the same number of rows "
++                         "as elements in T.")
++    if sU[1] != n_inputs:
++        raise ValueError("System does not define that many inputs.")
++    if not interp:
++        # Zero-order hold
++        # Algorithm: to integrate from time 0 to time dt, we solve
++        #   xdot = A x + B u,  x(0) = x0
++        #   udot = 0,          u(0) = u0.
++        #
++        # Solution is
++        #   [ x(dt) ]       [ A*dt   B*dt ] [ x0 ]
++        #   [ u(dt) ] = exp [  0     0    ] [ u0 ]
++        M = np.bmat([[A * dt, B * dt],
++                     [np.zeros((n_inputs, n_states + n_inputs))]])
++        # transpose everything because the state and input are row vectors
++        expMT = linalg.expm(transpose(M))
++        Ad = expMT[:n_states, :n_states]
++        Bd = expMT[n_states:, :n_states]
++        for i in xrange(1, n_steps):
++            xout[i] = dot(xout[i-1], Ad) + dot(U[i-1], Bd)
++    else:
++        # Linear interpolation between steps
++        # Algorithm: to integrate from time 0 to time dt, with linear
++        # interpolation between inputs u(0) = u0 and u(dt) = u1, we solve
++        #   xdot = A x + B u,        x(0) = x0
++        #   udot = (u1 - u0) / dt,   u(0) = u0.
++        #
++        # Solution is
++        #   [ x(dt) ]       [ A*dt  B*dt  0 ] [  x0   ]
++        #   [ u(dt) ] = exp [  0     0    I ] [  u0   ]
++        #   [u1 - u0]       [  0     0    0 ] [u1 - u0]
++        M = np.bmat([[A * dt, B * dt, np.zeros((n_states, n_inputs))],
++                     [np.zeros((n_inputs, n_states + n_inputs)),
++                      np.identity(n_inputs)],
++                     [np.zeros((n_inputs, n_states + 2 * n_inputs))]])
++        expMT = linalg.expm(transpose(M))
++        Ad = expMT[:n_states, :n_states]
++        Bd1 = expMT[n_states+n_inputs:, :n_states]
++        Bd0 = expMT[n_states:n_states + n_inputs, :n_states] - Bd1
++        for i in xrange(1, n_steps):
++            xout[i] = (dot(xout[i-1], Ad) + dot(U[i-1], Bd0) +
++                       dot(U[i], Bd1))
++    yout = (squeeze(dot(xout, transpose(C))) +
++            squeeze(dot(U, transpose(D))))
+     return T, squeeze(yout), squeeze(xout)
+ 
+ 
+@@ -780,9 +825,9 @@ def impulse(system, X0=None, T=None, N=None):
+     else:
+         sys = lti(*system)
+     if X0 is None:
+-        B = sys.B
++        X = squeeze(sys.B)
+     else:
+-        B = sys.B + X0
++        X = squeeze(sys.B + X0)
+     if N is None:
+         N = 100
+     if T is None:
+@@ -790,16 +835,7 @@ def impulse(system, X0=None, T=None, N=None):
+     else:
+         T = asarray(T)
+ 
+-    h = zeros(T.shape, sys.A.dtype)
+-    s, v = linalg.eig(sys.A)
+-    vi = linalg.inv(v)
+-    C = sys.C
+-    for k in range(len(h)):
+-        es = diag(numpy.exp(s * T[k]))
+-        eA = dot(dot(v, es), vi)
+-        eA = _cast_to_array_dtype(eA, h)
+-        h[k] = squeeze(dot(dot(C, eA), B))
+-
++    _t, h, _x = lsim(sys, 0., T, X, interp=0)
+     return T, h
+ 
+ 
+@@ -928,7 +964,7 @@ def step(system, X0=None, T=None, N=None):
+     else:
+         T = asarray(T)
+     U = ones(T.shape, sys.A.dtype)
+-    vals = lsim(sys, U, T, X0=X0)
++    vals = lsim(sys, U, T, X0=X0, interp=0)
+     return vals[0], vals[1]
+ 
+ 
+

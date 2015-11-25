@@ -37,7 +37,7 @@ index 3548add..eac1f34 100644
   *                 if shape is not None:
   *                     idx.shape = shape             # <<<<<<<<<<<<<<
   * 
-  *         if shape is None and isinstance(idx, np.ndarray):                       ##########################isintance 动态特性
+  *         if shape is None and isinstance(idx, np.ndarray):                                                      ##########################isintance 动态特性
   */ 
 -        if (__Pyx_PyObject_SetAttrStr(__pyx_v_idx, __pyx_n_s_shape, __pyx_v_shape) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 1080; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
 +        if (__Pyx_PyObject_SetAttrStr(__pyx_v_idx, __pyx_n_s__shape, __pyx_v_shape) < 0) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 1081; __pyx_clineno = __LINE__; goto __pyx_L1_error;}
@@ -78,7 +78,7 @@ index 3548add..eac1f34 100644
  
 -    /* "mtrand.pyx":1084
 +    /* "mtrand.pyx":1085
-  *         if shape is None and isinstance(idx, np.ndarray):                   ##########################isintance 动态特性
+  *         if shape is None and isinstance(idx, np.ndarray):                                      
   *             # In most cases a scalar will have been made an array
   *             idx = idx.item(0)             # <<<<<<<<<<<<<<
   * 
