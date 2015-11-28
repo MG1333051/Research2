@@ -1,0 +1,8 @@
+1,从https://code.djangoproject.com/query上下载django的bug tracker中的相关信息，只看关闭了的ticket条目。
+下载下来的文件名是djangoTicketOnClosed.csv。
+
+2,编写程序过滤djangoTicketOnClosed.csv中的条目，仅保留类型为defect和bug的相关条目，过滤后的文件命名为
+djangoTicketOnClosedBug.csv。
+
+3,从django的版本控制系统中找出与djangoTicketOnClosedBug.csv文件中ticketID相关的commit log信息，从log信息
+和csv文件中，挖掘出相关版本，相关文件的bug情况。
