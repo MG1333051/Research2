@@ -1,0 +1,96 @@
+2626
+1，中一些地方在修复后把原来用getattr(value, 'tzinfo', None)代码的部分，用了
+其他函数代替
+如：
+-        if getattr(value, 'tzinfo', None) is not None:              ########################################getattr
+-            raise ValueError("Oracle backend does not support timezone-aware datetimes.")
++        if is_aware(value):
++            if settings.USE_TZ:
++                value = value.astimezone(utc).replace(tzinfo=None)
++            else:
++                raise ValueError("Oracle backend does not support timezone-aware datetimes when USE_TZ is False.")
+
+
+-    if getattr(value, 'tzinfo', None):                                     #########################################getattr              
+-        now = datetime.now(LocalTimezone(value))
+-    else:
+-        now = datetime.now()
+-    now = now - timedelta(0, 0, now.microsecond)
++    now = datetime.now(utc if is_aware(value) else None)
+
+-        # Oracle doesn't support tz-aware datetimes
+-        if value.tzinfo is not None:
+-            raise ValueError("Oracle backend does not support timezone-aware datetimes.")
++        # Oracle doesn't support tz-aware times
++        if is_aware(value):
++            raise ValueError("Oracle backend does not support timezone-aware times.")
+
+diff --git a/django/utils/dateformat.py b/django/utils/dateformat.py
+index 0afda18..d87fb13 100644
+--- a/django/utils/dateformat.py
++++ b/django/utils/dateformat.py
+@@ -14,10 +14,13 @@ Usage:
+ import re
+ import time
+ import calendar
++import datetime
++
+ from django.utils.dates import MONTHS, MONTHS_3, MONTHS_ALT, MONTHS_AP, WEEKDAYS, WEEKDAYS_ABBR
+ from django.utils.tzinfo import LocalTimezone
+ from django.utils.translation import ugettext as _
+ from django.utils.encoding import force_unicode
++from django.utils.timezone import is_aware, is_naive
+ 
+ re_formatchars = re.compile(r'(?<!\\)([aAbBcdDEfFgGhHiIjlLmMnNOPrsStTUuwWyYzZ])')
+ re_escaped = re.compile(r'\\(.)')
+@@ -115,9 +118,12 @@ class DateFormat(TimeFormat):
+     def __init__(self, dt):
+         # Accepts either a datetime or date object.
+         self.data = dt
+-        self.timezone = getattr(dt, 'tzinfo', None)                            ######################   getattr
+-        if hasattr(self.data, 'hour') and not self.timezone:                  #############################hasattr
+-            self.timezone = LocalTimezone(dt)
++        self.timezone = None
++        if isinstance(dt, datetime.datetime):                ###################################isinstance
++            if is_naive(dt):
++                self.timezone = LocalTimezone(dt)
++            else:
++                self.timezone = dt.tzinfo
+ 
+     def b(self):
+         "Month, textual, 3 letters, lowercase; e.g. 'jan'"
+@@ -218,7 +224,7 @@ class DateFormat(TimeFormat):
+ 
+     def U(self):
+         "Seconds since the Unix epoch (January 1 1970 00:00:00 GMT)"
+-        if getattr(self.data, 'tzinfo', None):                                   ##################################getattr
++        if isinstance(self.data, datetime.datetime) and is_aware(self.data):     ##################################isinstance
+             return int(calendar.timegm(self.data.utctimetuple()))
+         else:
+             return int(time.mktime(self.data.timetuple()))
+
+	#########################################################################################查看了is_aware的说明，不能说getattr是乱用了		 
+			 def is_aware(value):
+    """
+    Determines if a given datetime.datetime is aware.
+
+    The concept is defined in Python's docs:
+    http://docs.python.org/library/datetime.html#datetime.tzinfo
+
+    Assuming value.tzinfo is either None or a proper datetime.tzinfo,
+    value.utcoffset() implements the appropriate logic.
+    """
+    return value.utcoffset() is not None
+	
+	
+	
+2，考虑代码删除行和代码增加行 动态特性使用的情况，譬如，getattr更容易出现在代码删除行，而hasattr 更容易出现在
+代码增加行，isinstance均衡？？？？？？？？？？？？
+isinstance多用于代码增加中，因为后续维护者在修复bug的时候，地某个对象是否有属性不明确，对对象类型也不明确，所以在进行某些操作的时候要先预判段要操作对象的
+类型，如其所属的父类…………
+
+
+3,动态特性的分布通常在一起，譬如 getattr,hasattr,isinstance,del
+hasattr ---- del 查看是否有某个属性，删除它
+
+4，还是觉得开发人员在开发中用了这些特性是为了帮助自己更好的编写代码

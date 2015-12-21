@@ -1,0 +1,44 @@
+commit 551897b13446426a2533dafdbd2ea2bc4f96b1e5
+Author: Adrian Holovaty <adrian@holovaty.com>
+Date:   Fri Dec 16 04:59:35 2005 +0000
+
+    Fixed #937 -- autoreload no longer reloads on every request on Windows. Thanks for the patch, Eugene
+    
+    git-svn-id: http://code.djangoproject.com/svn/django/trunk@1686 bcc190cf-cafb-0310-a4f2-bffc1f526a37
+
+diff --git a/django/utils/autoreload.py b/django/utils/autoreload.py
+index 04e319c..1edec19 100644
+--- a/django/utils/autoreload.py
++++ b/django/utils/autoreload.py
+@@ -31,21 +31,24 @@
+ import os, sys, thread, time
+ 
+ RUN_RELOADER = True
+-reloadFiles = []
+ 
+ def reloader_thread():
+     mtimes = {}
++    win = (sys.platform == "win32")
+     while RUN_RELOADER:
+-        for filename in filter(lambda v: v, map(lambda m: getattr(m, "__file__", None), sys.modules.values())) + reloadFiles:      #############################getattr
++        for filename in filter(lambda v: v, map(lambda m: getattr(m, "__file__", None), sys.modules.values())):                    #############################getattr
++            if filename.endswith(".pyc") or filename.endswith("*.pyo"):
++                filename = filename[:-1]
+             if not os.path.exists(filename):
+                 continue # File might be in an egg, so it can't be reloaded.
+-            if filename.endswith(".pyc"):
+-                filename = filename[:-1]
+-            mtime = os.stat(filename).st_mtime
++            stat = os.stat(filename)
++            mtime = stat.st_mtime
++            if win:
++                mtime -= stat.st_ctime
+             if filename not in mtimes:
+                 mtimes[filename] = mtime
+                 continue
+-            if mtime > mtimes[filename]:
++            if mtime != mtimes[filename]:
+                 sys.exit(3) # force reload
+         time.sleep(1)
+ 
+

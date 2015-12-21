@@ -1,0 +1,2013 @@
+commit 18d2f4a81611fa4051ccdcfb9dd443f3a247102e
+Author: Jannis Leidel <jannis@leidel.info>
+Date:   Tue May 3 10:44:23 2011 +0000
+
+    Fixed #5833 -- Modified the admin list filters to be easier to customize. Many thanks to Honza Král, Tom X. Tobin, gerdemb, eandre, sciyoshi, bendavis78 and Julien Phalip for working on this.
+    
+    git-svn-id: http://code.djangoproject.com/svn/django/trunk@16144 bcc190cf-cafb-0310-a4f2-bffc1f526a37
+
+diff --git a/django/contrib/admin/__init__.py b/django/contrib/admin/__init__.py
+index f8e634e..1084784 100644
+--- a/django/contrib/admin/__init__.py
++++ b/django/contrib/admin/__init__.py
+@@ -4,6 +4,9 @@ from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+ from django.contrib.admin.options import ModelAdmin, HORIZONTAL, VERTICAL
+ from django.contrib.admin.options import StackedInline, TabularInline
+ from django.contrib.admin.sites import AdminSite, site
++from django.contrib.admin.filters import (ListFilter, SimpleListFilter,
++    FieldListFilter, BooleanFieldListFilter, RelatedFieldListFilter,
++    ChoicesFieldListFilter, DateFieldListFilter, AllValuesFieldListFilter)
+ 
+ 
+ def autodiscover():
+diff --git a/django/contrib/admin/filters.py b/django/contrib/admin/filters.py
+new file mode 100644
+index 0000000..0e3e2e5
+--- /dev/null
++++ b/django/contrib/admin/filters.py
+@@ -0,0 +1,398 @@
++"""
++This encapsulates the logic for displaying filters in the Django admin.
++Filters are specified in models with the "list_filter" option.
++
++Each filter subclass knows how to display a filter for a field that passes a
++certain test -- e.g. being a DateField or ForeignKey.
++"""
++import datetime
++
++from django.db import models
++from django.core.exceptions import ImproperlyConfigured
++from django.utils.encoding import smart_unicode
++from django.utils.translation import ugettext_lazy as _
++
++from django.contrib.admin.util import (get_model_from_relation,
++    reverse_field_path, get_limit_choices_to_from_path)
++
++class ListFilter(object):
++    title = None  # Human-readable title to appear in the right sidebar.
++
++    def __init__(self, request, params, model, model_admin):
++        self.params = params
++        if self.title is None:
++            raise ImproperlyConfigured(
++                "The list filter '%s' does not specify "
++                "a 'title'." % self.__class__.__name__)
++
++    def has_output(self):
++        """
++        Returns True if some choices would be output for the filter.
++        """
++        raise NotImplementedError
++
++    def choices(self, cl):
++        """
++        Returns choices ready to be output in the template.
++        """
++        raise NotImplementedError
++
++    def queryset(self, request, queryset):
++        """
++        Returns the filtered queryset.
++        """
++        raise NotImplementedError
++
++    def used_params(self):
++        """
++        Return a list of parameters to consume from the change list
++        querystring.
++        """
++        raise NotImplementedError
++
++
++
++class SimpleListFilter(ListFilter):
++    # The parameter that should be used in the query string for that filter.
++    parameter_name = None
++
++    def __init__(self, request, params, model, model_admin):
++        super(SimpleListFilter, self).__init__(
++            request, params, model, model_admin)
++        if self.parameter_name is None:
++            raise ImproperlyConfigured(
++                "The list filter '%s' does not specify "
++                "a 'parameter_name'." % self.__class__.__name__)
++        self.lookup_choices = self.lookups(request)
++
++    def has_output(self):
++        return len(self.lookup_choices) > 0
++
++    def value(self):
++        """
++        Returns the value given in the query string for this filter,
++        if any. Returns None otherwise.
++        """
++        return self.params.get(self.parameter_name, None)
++
++    def lookups(self, request):
++        """
++        Must be overriden to return a list of tuples (value, verbose value)
++        """
++        raise NotImplementedError
++
++    def used_params(self):
++        return [self.parameter_name]
++
++    def choices(self, cl):
++        yield {
++            'selected': self.value() is None,
++            'query_string': cl.get_query_string({}, [self.parameter_name]),
++            'display': _('All'),
++        }
++        for lookup, title in self.lookup_choices:
++            yield {
++                'selected': self.value() == lookup,
++                'query_string': cl.get_query_string({
++                    self.parameter_name: lookup,
++                }, []),
++                'display': title,
++            }
++
++
++class FieldListFilter(ListFilter):
++    _field_list_filters = []
++    _take_priority_index = 0
++
++    def __init__(self, field, request, params, model, model_admin, field_path):
++        self.field = field
++        self.field_path = field_path
++        self.title = field_path
++        super(FieldListFilter, self).__init__(request, params, model, model_admin)
++
++    def has_output(self):
++        return True
++
++    def queryset(self, request, queryset):
++        for p in self.used_params():
++            if p in self.params:
++                return queryset.filter(**{p: self.params[p]})
++
++    @classmethod
++    def register(cls, test, list_filter_class, take_priority=False):
++        if take_priority:
++            # This is to allow overriding the default filters for certain types
++            # of fields with some custom filters. The first found in the list
++            # is used in priority.
++            cls._field_list_filters.insert(
++                cls._take_priority_index, (test, list_filter_class))
++            cls._take_priority_index += 1
++        else:
++            cls._field_list_filters.append((test, list_filter_class))
++
++    @classmethod
++    def create(cls, field, request, params, model, model_admin, field_path):
++        for test, list_filter_class in cls._field_list_filters:
++            if not test(field):
++                continue
++            return list_filter_class(field, request, params,
++                model, model_admin, field_path=field_path)
++
++
++class RelatedFieldListFilter(FieldListFilter):
++    def __init__(self, field, request, params, model, model_admin, field_path):
++        super(RelatedFieldListFilter, self).__init__(
++            field, request, params, model, model_admin, field_path)
++
++        other_model = get_model_from_relation(field)
++        if isinstance(field, (models.ManyToManyField,                            ############################isinstance
++                          models.related.RelatedObject)):
++            # no direct field on this model, get name from other model
++            self.lookup_title = other_model._meta.verbose_name
++        else:
++            self.lookup_title = field.verbose_name # use field name
++        rel_name = other_model._meta.pk.name
++        self.lookup_kwarg = '%s__%s__exact' % (self.field_path, rel_name)
++        self.lookup_kwarg_isnull = '%s__isnull' % (self.field_path)
++        self.lookup_val = request.GET.get(self.lookup_kwarg, None)
++        self.lookup_val_isnull = request.GET.get(
++                                      self.lookup_kwarg_isnull, None)
++        self.lookup_choices = field.get_choices(include_blank=False)
++        self.title = self.lookup_title
++
++    def has_output(self):
++        if (isinstance(self.field, models.related.RelatedObject)                   ############################isinstance
++                and self.field.field.null or hasattr(self.field, 'rel')            ############################hasattr
++                    and self.field.null):
++            extra = 1
++        else:
++            extra = 0
++        return len(self.lookup_choices) + extra > 1
++
++    def used_params(self):
++        return [self.lookup_kwarg, self.lookup_kwarg_isnull]
++
++    def choices(self, cl):
++        from django.contrib.admin.views.main import EMPTY_CHANGELIST_VALUE
++        yield {
++            'selected': self.lookup_val is None and not self.lookup_val_isnull,
++            'query_string': cl.get_query_string({},
++                [self.lookup_kwarg, self.lookup_kwarg_isnull]),
++            'display': _('All'),
++        }
++        for pk_val, val in self.lookup_choices:
++            yield {
++                'selected': self.lookup_val == smart_unicode(pk_val),
++                'query_string': cl.get_query_string({
++                    self.lookup_kwarg: pk_val,
++                }, [self.lookup_kwarg_isnull]),
++                'display': val,
++            }
++        if (isinstance(self.field, models.related.RelatedObject)                     ############################isinstance           
++                and self.field.field.null or hasattr(self.field, 'rel')             ############################isinstance
++                    and self.field.null):
++            yield {
++                'selected': bool(self.lookup_val_isnull),
++                'query_string': cl.get_query_string({
++                    self.lookup_kwarg_isnull: 'True',
++                }, [self.lookup_kwarg]),
++                'display': EMPTY_CHANGELIST_VALUE,
++            }
++
++FieldListFilter.register(lambda f: (
++        hasattr(f, 'rel') and bool(f.rel) or                                       ############################hasattr
++        isinstance(f, models.related.RelatedObject)), RelatedFieldListFilter)      ############################isinstance
++
++
++class BooleanFieldListFilter(FieldListFilter):
++    def __init__(self, field, request, params, model, model_admin, field_path):
++        super(BooleanFieldListFilter, self).__init__(field,
++            request, params, model, model_admin, field_path)
++        self.lookup_kwarg = '%s__exact' % self.field_path
++        self.lookup_kwarg2 = '%s__isnull' % self.field_path
++        self.lookup_val = request.GET.get(self.lookup_kwarg, None)
++        self.lookup_val2 = request.GET.get(self.lookup_kwarg2, None)
++
++    def used_params(self):
++        return [self.lookup_kwarg, self.lookup_kwarg2]
++
++    def choices(self, cl):
++        for lookup, title in (
++                (None, _('All')),
++                ('1', _('Yes')),
++                ('0', _('No'))):
++            yield {
++                'selected': self.lookup_val == lookup and not self.lookup_val2,
++                'query_string': cl.get_query_string({
++                        self.lookup_kwarg: lookup,
++                    }, [self.lookup_kwarg2]),
++                'display': title,
++            }
++        if isinstance(self.field, models.NullBooleanField):                 ############################isinstance
++            yield {
++                'selected': self.lookup_val2 == 'True',
++                'query_string': cl.get_query_string({
++                        self.lookup_kwarg2: 'True',
++                    }, [self.lookup_kwarg]),
++                'display': _('Unknown'),
++            }
++
++FieldListFilter.register(lambda f: isinstance(f,                           ############################isinstance
++    (models.BooleanField, models.NullBooleanField)), BooleanFieldListFilter)
++
++
++class ChoicesFieldListFilter(FieldListFilter):
++    def __init__(self, field, request, params, model, model_admin, field_path):
++        super(ChoicesFieldListFilter, self).__init__(
++            field, request, params, model, model_admin, field_path)
++        self.lookup_kwarg = '%s__exact' % self.field_path
++        self.lookup_val = request.GET.get(self.lookup_kwarg)
++
++    def used_params(self):
++        return [self.lookup_kwarg]
++
++    def choices(self, cl):
++        yield {
++            'selected': self.lookup_val is None,
++            'query_string': cl.get_query_string({}, [self.lookup_kwarg]),
++            'display': _('All')
++        }
++        for lookup, title in self.field.flatchoices:
++            yield {
++                'selected': smart_unicode(lookup) == self.lookup_val,
++                'query_string': cl.get_query_string({self.lookup_kwarg: lookup}),
++                'display': title,
++            }
++
++FieldListFilter.register(lambda f: bool(f.choices), ChoicesFieldListFilter)
++
++
++class DateFieldListFilter(FieldListFilter):
++    def __init__(self, field, request, params, model, model_admin, field_path):
++        super(DateFieldListFilter, self).__init__(
++            field, request, params, model, model_admin, field_path)
++
++        self.field_generic = '%s__' % self.field_path
++        self.date_params = dict([(k, v) for k, v in params.items()
++                                 if k.startswith(self.field_generic)])
++
++        today = datetime.date.today()
++        one_week_ago = today - datetime.timedelta(days=7)
++        today_str = (isinstance(self.field, models.DateTimeField)                      ############################isinstance
++                        and today.strftime('%Y-%m-%d 23:59:59')
++                        or today.strftime('%Y-%m-%d'))
++
++        self.lookup_kwarg_year = '%s__year' % self.field_path
++        self.lookup_kwarg_month = '%s__month' % self.field_path
++        self.lookup_kwarg_day = '%s__day' % self.field_path
++        self.lookup_kwarg_past_7_days_gte = '%s__gte' % self.field_path
++        self.lookup_kwarg_past_7_days_lte = '%s__lte' % self.field_path
++
++        self.links = (
++            (_('Any date'), {}),
++            (_('Today'), {
++                self.lookup_kwarg_year: str(today.year),
++                self.lookup_kwarg_month: str(today.month),
++                self.lookup_kwarg_day: str(today.day),
++            }),
++            (_('Past 7 days'), {
++                self.lookup_kwarg_past_7_days_gte: one_week_ago.strftime('%Y-%m-%d'),
++                self.lookup_kwarg_past_7_days_lte: today_str,
++            }),
++            (_('This month'), {
++                self.lookup_kwarg_year: str(today.year),
++                self.lookup_kwarg_month: str(today.month),
++            }),
++            (_('This year'), {
++                self.lookup_kwarg_year: str(today.year),
++            }),
++        )
++
++    def used_params(self):
++        return [
++            self.lookup_kwarg_year, self.lookup_kwarg_month, self.lookup_kwarg_day,
++            self.lookup_kwarg_past_7_days_gte, self.lookup_kwarg_past_7_days_lte
++        ]
++
++    def queryset(self, request, queryset):
++        """
++        Override the default behaviour since there can be multiple query
++        string parameters used for the same date filter (e.g. year + month).
++        """
++        query_dict = {}
++        for p in self.used_params():
++            if p in self.params:
++                query_dict[p] = self.params[p]
++        if len(query_dict):
++            return queryset.filter(**query_dict)
++
++    def choices(self, cl):
++        for title, param_dict in self.links:
++            yield {
++                'selected': self.date_params == param_dict,
++                'query_string': cl.get_query_string(
++                    param_dict, [self.field_generic]),
++                'display': title,
++            }
++
++FieldListFilter.register(
++    lambda f: isinstance(f, models.DateField), DateFieldListFilter)                         ############################isinstance
++
++
++# This should be registered last, because it's a last resort. For example,
++# if a field is eligible to use the BooleanFieldListFilter, that'd be much
++# more appropriate, and the AllValuesFieldListFilter won't get used for it.
++class AllValuesFieldListFilter(FieldListFilter):
++    def __init__(self, field, request, params, model, model_admin, field_path):
++        super(AllValuesFieldListFilter, self).__init__(
++            field, request, params, model, model_admin, field_path)
++        self.lookup_kwarg = self.field_path
++        self.lookup_kwarg_isnull = '%s__isnull' % self.field_path
++        self.lookup_val = request.GET.get(self.lookup_kwarg, None)
++        self.lookup_val_isnull = request.GET.get(self.lookup_kwarg_isnull, None)
++        parent_model, reverse_path = reverse_field_path(model, self.field_path)
++        queryset = parent_model._default_manager.all()
++        # optional feature: limit choices base on existing relationships
++        # queryset = queryset.complex_filter(
++        #    {'%s__isnull' % reverse_path: False})
++        limit_choices_to = get_limit_choices_to_from_path(model, field_path)
++        queryset = queryset.filter(limit_choices_to)
++
++        self.lookup_choices = queryset.distinct(
++            ).order_by(field.name).values_list(field.name, flat=True)
++
++    def used_params(self):
++        return [self.lookup_kwarg, self.lookup_kwarg_isnull]
++
++    def choices(self, cl):
++        from django.contrib.admin.views.main import EMPTY_CHANGELIST_VALUE
++        yield {
++            'selected': (self.lookup_val is None
++                and self.lookup_val_isnull is None),
++            'query_string': cl.get_query_string({},
++                [self.lookup_kwarg, self.lookup_kwarg_isnull]),
++            'display': _('All'),
++        }
++        include_none = False
++        for val in self.lookup_choices:
++            if val is None:
++                include_none = True
++                continue
++            val = smart_unicode(val)
++            yield {
++                'selected': self.lookup_val == val,
++                'query_string': cl.get_query_string({
++                    self.lookup_kwarg: val,
++                }, [self.lookup_kwarg_isnull]),
++                'display': val,
++            }
++        if include_none:
++            yield {
++                'selected': bool(self.lookup_val_isnull),
++                'query_string': cl.get_query_string({
++                    self.lookup_kwarg_isnull: 'True',
++                }, [self.lookup_kwarg]),
++                'display': EMPTY_CHANGELIST_VALUE,
++            }
++
++FieldListFilter.register(lambda f: True, AllValuesFieldListFilter)
+diff --git a/django/contrib/admin/filterspecs.py b/django/contrib/admin/filterspecs.py
+deleted file mode 100644
+index 965b32b..0000000
+--- a/django/contrib/admin/filterspecs.py
++++ /dev/null
+@@ -1,279 +0,0 @@
+-"""
+-FilterSpec encapsulates the logic for displaying filters in the Django admin.
+-Filters are specified in models with the "list_filter" option.
+-
+-Each filter subclass knows how to display a filter for a field that passes a
+-certain test -- e.g. being a DateField or ForeignKey.
+-"""
+-
+-from django.db import models
+-from django.utils.encoding import smart_unicode, iri_to_uri
+-from django.utils.translation import ugettext as _
+-from django.utils.html import escape
+-from django.utils.safestring import mark_safe
+-from django.contrib.admin.util import get_model_from_relation, \
+-    reverse_field_path, get_limit_choices_to_from_path
+-import datetime
+-
+-class FilterSpec(object):
+-    filter_specs = []
+-    def __init__(self, f, request, params, model, model_admin,
+-                 field_path=None):
+-        self.field = f
+-        self.params = params
+-        self.field_path = field_path
+-        if field_path is None:
+-            if isinstance(f, models.related.RelatedObject):              ############################isinstance
+-                self.field_path = f.var_name
+-            else:
+-                self.field_path = f.name
+-
+-    def register(cls, test, factory):
+-        cls.filter_specs.append((test, factory))
+-    register = classmethod(register)
+-
+-    def create(cls, f, request, params, model, model_admin, field_path=None):
+-        for test, factory in cls.filter_specs:
+-            if test(f):
+-                return factory(f, request, params, model, model_admin,
+-                               field_path=field_path)
+-    create = classmethod(create)
+-
+-    def has_output(self):
+-        return True
+-
+-    def choices(self, cl):
+-        raise NotImplementedError()
+-
+-    def title(self):
+-        return self.field.verbose_name
+-
+-    def output(self, cl):
+-        t = []
+-        if self.has_output():
+-            t.append(_(u'<h3>By %s:</h3>\n<ul>\n') % escape(self.title()))
+-
+-            for choice in self.choices(cl):
+-                t.append(u'<li%s><a href="%s">%s</a></li>\n' % \
+-                    ((choice['selected'] and ' class="selected"' or ''),
+-                     iri_to_uri(choice['query_string']),
+-                     choice['display']))
+-            t.append('</ul>\n\n')
+-        return mark_safe("".join(t))
+-
+-class RelatedFilterSpec(FilterSpec):
+-    def __init__(self, f, request, params, model, model_admin,
+-                 field_path=None):
+-        super(RelatedFilterSpec, self).__init__(
+-            f, request, params, model, model_admin, field_path=field_path)
+-
+-        other_model = get_model_from_relation(f)
+-        if isinstance(f, (models.ManyToManyField,                                        ############################isinstance
+-                          models.related.RelatedObject)):
+-            # no direct field on this model, get name from other model
+-            self.lookup_title = other_model._meta.verbose_name
+-        else:
+-            self.lookup_title = f.verbose_name # use field name
+-        rel_name = other_model._meta.pk.name
+-        self.lookup_kwarg = '%s__%s__exact' % (self.field_path, rel_name)
+-        self.lookup_kwarg_isnull = '%s__isnull' % (self.field_path)
+-        self.lookup_val = request.GET.get(self.lookup_kwarg, None)
+-        self.lookup_val_isnull = request.GET.get(
+-                                      self.lookup_kwarg_isnull, None)
+-        self.lookup_choices = f.get_choices(include_blank=False)
+-
+-    def has_output(self):
+-        if isinstance(self.field, models.related.RelatedObject) \                            ############################isinstance
+-           and self.field.field.null or hasattr(self.field, 'rel') \                         ############################hasattr
+-           and self.field.null:
+-            extra = 1
+-        else:
+-            extra = 0
+-        return len(self.lookup_choices) + extra > 1
+-
+-    def title(self):
+-        return self.lookup_title
+-
+-    def choices(self, cl):
+-        from django.contrib.admin.views.main import EMPTY_CHANGELIST_VALUE
+-        yield {'selected': self.lookup_val is None
+-                           and not self.lookup_val_isnull,
+-               'query_string': cl.get_query_string(
+-                               {},
+-                               [self.lookup_kwarg, self.lookup_kwarg_isnull]),
+-               'display': _('All')}
+-        for pk_val, val in self.lookup_choices:
+-            yield {'selected': self.lookup_val == smart_unicode(pk_val),
+-                   'query_string': cl.get_query_string(
+-                                   {self.lookup_kwarg: pk_val},
+-                                   [self.lookup_kwarg_isnull]),
+-                   'display': val}
+-        if isinstance(self.field, models.related.RelatedObject) \                              ############################isinstance             
+-           and self.field.field.null or hasattr(self.field, 'rel') \                           ############################hasattr
+-           and self.field.null:
+-            yield {'selected': bool(self.lookup_val_isnull),
+-                   'query_string': cl.get_query_string(
+-                                   {self.lookup_kwarg_isnull: 'True'},
+-                                   [self.lookup_kwarg]),
+-                   'display': EMPTY_CHANGELIST_VALUE}
+-
+-FilterSpec.register(lambda f: (
+-        hasattr(f, 'rel') and bool(f.rel) or                                                  ############################hasattr
+-        isinstance(f, models.related.RelatedObject)), RelatedFilterSpec)                      ############################isinstance
+-
+-class BooleanFieldFilterSpec(FilterSpec):
+-    def __init__(self, f, request, params, model, model_admin,
+-                 field_path=None):
+-        super(BooleanFieldFilterSpec, self).__init__(f, request, params, model,
+-                                                     model_admin,
+-                                                     field_path=field_path)
+-        self.lookup_kwarg = '%s__exact' % self.field_path
+-        self.lookup_kwarg2 = '%s__isnull' % self.field_path
+-        self.lookup_val = request.GET.get(self.lookup_kwarg, None)
+-        self.lookup_val2 = request.GET.get(self.lookup_kwarg2, None)
+-
+-    def title(self):
+-        return self.field.verbose_name
+-
+-    def choices(self, cl):
+-        for k, v in ((_('All'), None), (_('Yes'), '1'), (_('No'), '0')):
+-            yield {'selected': self.lookup_val == v and not self.lookup_val2,
+-                   'query_string': cl.get_query_string(
+-                                   {self.lookup_kwarg: v},
+-                                   [self.lookup_kwarg2]),
+-                   'display': k}
+-        if isinstance(self.field, models.NullBooleanField):                           ############################isinstance
+-            yield {'selected': self.lookup_val2 == 'True',
+-                   'query_string': cl.get_query_string(
+-                                   {self.lookup_kwarg2: 'True'},
+-                                   [self.lookup_kwarg]),
+-                   'display': _('Unknown')}
+-
+-FilterSpec.register(lambda f: isinstance(f, models.BooleanField)                  ############################isinstance
+-                              or isinstance(f, models.NullBooleanField),           ############################isinstance
+-                                 BooleanFieldFilterSpec)
+-
+-class ChoicesFilterSpec(FilterSpec):
+-    def __init__(self, f, request, params, model, model_admin,
+-                 field_path=None):
+-        super(ChoicesFilterSpec, self).__init__(f, request, params, model,
+-                                                model_admin,
+-                                                field_path=field_path)
+-        self.lookup_kwarg = '%s__exact' % self.field_path
+-        self.lookup_val = request.GET.get(self.lookup_kwarg, None)
+-
+-    def choices(self, cl):
+-        yield {'selected': self.lookup_val is None,
+-               'query_string': cl.get_query_string({}, [self.lookup_kwarg]),
+-               'display': _('All')}
+-        for k, v in self.field.flatchoices:
+-            yield {'selected': smart_unicode(k) == self.lookup_val,
+-                    'query_string': cl.get_query_string(
+-                                    {self.lookup_kwarg: k}),
+-                    'display': v}
+-
+-FilterSpec.register(lambda f: bool(f.choices), ChoicesFilterSpec)
+-
+-class DateFieldFilterSpec(FilterSpec):
+-    def __init__(self, f, request, params, model, model_admin,
+-                 field_path=None): 
+-        super(DateFieldFilterSpec, self).__init__(f, request, params, model,
+-                                                  model_admin,
+-                                                  field_path=field_path)
+-
+-        self.field_generic = '%s__' % self.field_path
+-
+-        self.date_params = dict([(k, v) for k, v in params.items()
+-                                 if k.startswith(self.field_generic)])
+-
+-        today = datetime.date.today()
+-        one_week_ago = today - datetime.timedelta(days=7)
+-        today_str = isinstance(self.field, models.DateTimeField) \                      ############################isinstance
+-                    and today.strftime('%Y-%m-%d 23:59:59') \
+-                    or today.strftime('%Y-%m-%d')
+-
+-        self.links = (
+-            (_('Any date'), {}),
+-            (_('Today'), {'%s__year' % self.field_path: str(today.year),
+-                       '%s__month' % self.field_path: str(today.month),
+-                       '%s__day' % self.field_path: str(today.day)}),
+-            (_('Past 7 days'), {'%s__gte' % self.field_path:
+-                                    one_week_ago.strftime('%Y-%m-%d'),
+-                             '%s__lte' % self.field_path: today_str}),
+-            (_('This month'), {'%s__year' % self.field_path: str(today.year),
+-                             '%s__month' % self.field_path: str(today.month)}),
+-            (_('This year'), {'%s__year' % self.field_path: str(today.year)})
+-        )
+-
+-    def title(self):
+-        return self.field.verbose_name
+-
+-    def choices(self, cl):
+-        for title, param_dict in self.links:
+-            yield {'selected': self.date_params == param_dict,
+-                   'query_string': cl.get_query_string(
+-                                   param_dict,
+-                                   [self.field_generic]),
+-                   'display': title}
+-
+-FilterSpec.register(lambda f: isinstance(f, models.DateField),                           ############################isinstance
+-                              DateFieldFilterSpec)
+-
+-
+-# This should be registered last, because it's a last resort. For example,
+-# if a field is eligible to use the BooleanFieldFilterSpec, that'd be much
+-# more appropriate, and the AllValuesFilterSpec won't get used for it.
+-class AllValuesFilterSpec(FilterSpec):
+-    def __init__(self, f, request, params, model, model_admin,
+-                 field_path=None):
+-        super(AllValuesFilterSpec, self).__init__(f, request, params, model,
+-                                                  model_admin,
+-                                                  field_path=field_path)
+-        self.lookup_kwarg = self.field_path
+-        self.lookup_kwarg_isnull = '%s__isnull' % self.field_path
+-        self.lookup_val = request.GET.get(self.lookup_kwarg, None)
+-        self.lookup_val_isnull = request.GET.get(self.lookup_kwarg_isnull,
+-                                                 None)
+-        parent_model, reverse_path = reverse_field_path(model, self.field_path)
+-        queryset = parent_model._default_manager.all()
+-        # optional feature: limit choices base on existing relationships
+-        # queryset = queryset.complex_filter(
+-        #    {'%s__isnull' % reverse_path: False})
+-        limit_choices_to = get_limit_choices_to_from_path(model, field_path)
+-        queryset = queryset.filter(limit_choices_to)
+-
+-        self.lookup_choices = \
+-            queryset.distinct().order_by(f.name).values_list(f.name, flat=True)
+-
+-    def title(self):
+-        return self.field.verbose_name
+-
+-    def choices(self, cl):
+-        from django.contrib.admin.views.main import EMPTY_CHANGELIST_VALUE
+-        yield {'selected': self.lookup_val is None
+-                           and self.lookup_val_isnull is None,
+-               'query_string': cl.get_query_string(
+-                               {},
+-                               [self.lookup_kwarg, self.lookup_kwarg_isnull]),
+-               'display': _('All')}
+-        include_none = False
+-
+-        for val in self.lookup_choices:
+-            if val is None:
+-                include_none = True
+-                continue
+-            val = smart_unicode(val)
+-
+-            yield {'selected': self.lookup_val == val,
+-                   'query_string': cl.get_query_string(
+-                                   {self.lookup_kwarg: val},
+-                                   [self.lookup_kwarg_isnull]),
+-                   'display': val}
+-        if include_none:
+-            yield {'selected': bool(self.lookup_val_isnull),
+-                    'query_string': cl.get_query_string(
+-                                    {self.lookup_kwarg_isnull: 'True'},
+-                                    [self.lookup_kwarg]),
+-                    'display': EMPTY_CHANGELIST_VALUE}
+-
+-FilterSpec.register(lambda f: True, AllValuesFilterSpec)
+diff --git a/django/contrib/admin/options.py b/django/contrib/admin/options.py
+index 098eda5..787f856 100644
+--- a/django/contrib/admin/options.py
++++ b/django/contrib/admin/options.py
+@@ -1091,7 +1091,7 @@ class ModelAdmin(BaseModelAdmin):
+         if (actions and request.method == 'POST' and
+                 'index' in request.POST and '_save' not in request.POST):
+             if selected:
+-                response = self.response_action(request, queryset=cl.get_query_set())
++                response = self.response_action(request, queryset=cl.get_query_set(request))
+                 if response:
+                     return response
+                 else:
+@@ -1107,7 +1107,7 @@ class ModelAdmin(BaseModelAdmin):
+                 helpers.ACTION_CHECKBOX_NAME in request.POST and
+                 'index' not in request.POST and '_save' not in request.POST):
+             if selected:
+-                response = self.response_action(request, queryset=cl.get_query_set())
++                response = self.response_action(request, queryset=cl.get_query_set(request))
+                 if response:
+                     return response
+                 else:
+diff --git a/django/contrib/admin/templatetags/admin_list.py b/django/contrib/admin/templatetags/admin_list.py
+index 5e199ce..b72c0be 100644
+--- a/django/contrib/admin/templatetags/admin_list.py
++++ b/django/contrib/admin/templatetags/admin_list.py
+@@ -319,7 +319,7 @@ def search_form(cl):
+ 
+ @register.inclusion_tag('admin/filter.html')
+ def admin_list_filter(cl, spec):
+-    return {'title': spec.title(), 'choices' : list(spec.choices(cl))}
++    return {'title': spec.title, 'choices' : list(spec.choices(cl))}
+ 
+ @register.inclusion_tag('admin/actions.html', takes_context=True)
+ def admin_actions(context):
+diff --git a/django/contrib/admin/validation.py b/django/contrib/admin/validation.py
+index 159afa4..1d57686 100644
+--- a/django/contrib/admin/validation.py
++++ b/django/contrib/admin/validation.py
+@@ -3,6 +3,7 @@ from django.db import models
+ from django.db.models.fields import FieldDoesNotExist
+ from django.forms.models import (BaseModelForm, BaseModelFormSet, fields_for_model,
+     _get_foreign_key)
++from django.contrib.admin import ListFilter, FieldListFilter
+ from django.contrib.admin.util import get_fields_from_path, NotRelationField
+ from django.contrib.admin.options import (flatten_fieldsets, BaseModelAdmin,
+     HORIZONTAL, VERTICAL)
+@@ -54,15 +55,43 @@ def validate(cls, model):
+     # list_filter
+     if hasattr(cls, 'list_filter'):
+         check_isseq(cls, 'list_filter', cls.list_filter)
+-        for idx, fpath in enumerate(cls.list_filter):
+-            try:
+-                get_fields_from_path(model, fpath)
+-            except (NotRelationField, FieldDoesNotExist), e:
+-                raise ImproperlyConfigured(
+-                    "'%s.list_filter[%d]' refers to '%s' which does not refer to a Field." % (
+-                        cls.__name__, idx, fpath
+-                    )
+-                )
++        for idx, item in enumerate(cls.list_filter):
++            # There are three options for specifying a filter:
++            #   1: 'field' - a basic field filter, possibly w/ relationships (eg, 'field__rel')
++            #   2: ('field', SomeFieldListFilter) - a field-based list filter class
++            #   3: SomeListFilter - a non-field list filter class
++            if callable(item) and not isinstance(item, models.Field):                          ############################isinstance   callable
++                # If item is option 3, it should be a ListFilter...
++                if not issubclass(item, ListFilter):                                          ############################issubclass
++                    raise ImproperlyConfigured("'%s.list_filter[%d]' is '%s'"
++                            " which is not a descendant of ListFilter."
++                            % (cls.__name__, idx, item.__name__))
++                # ...  but not a FieldListFilter.
++                if issubclass(item, FieldListFilter):                                         ############################issubclass
++                    raise ImproperlyConfigured("'%s.list_filter[%d]' is '%s'"
++                            " which is of type FieldListFilter but is not"
++                            " associated with a field name."
++                            % (cls.__name__, idx, item.__name__))
++            else:
++                try:
++                    # Check for option #2 (tuple)
++                    field, list_filter_class = item
++                except (TypeError, ValueError):
++                    # item is option #1
++                    field = item
++                else:
++                    # item is option #2
++                    if not issubclass(list_filter_class, FieldListFilter):             ############################issubclass
++                        raise ImproperlyConfigured("'%s.list_filter[%d][1]'"
++                            " is '%s' which is not of type FieldListFilter."
++                            % (cls.__name__, idx, list_filter_class.__name__))
++                # Validate the field string
++                try:
++                    get_fields_from_path(model, field)
++                except (NotRelationField, FieldDoesNotExist):
++                    raise ImproperlyConfigured("'%s.list_filter[%d]' refers to '%s'"
++                            " which does not refer to a Field."
++                            % (cls.__name__, idx, field))
+ 
+     # list_per_page = 100
+     if hasattr(cls, 'list_per_page') and not isinstance(cls.list_per_page, int):
+diff --git a/django/contrib/admin/views/main.py b/django/contrib/admin/views/main.py
+index 0cfc43d..d5f401c 100644
+--- a/django/contrib/admin/views/main.py
++++ b/django/contrib/admin/views/main.py
+@@ -1,13 +1,15 @@
+-from django.contrib.admin.filterspecs import FilterSpec
+-from django.contrib.admin.options import IncorrectLookupParameters
+-from django.contrib.admin.util import quote, get_fields_from_path
++import operator
++
+ from django.core.exceptions import SuspiciousOperation
+ from django.core.paginator import InvalidPage
+ from django.db import models
+ from django.utils.encoding import force_unicode, smart_str
+ from django.utils.translation import ugettext, ugettext_lazy
+ from django.utils.http import urlencode
+-import operator
++
++from django.contrib.admin import FieldListFilter
++from django.contrib.admin.options import IncorrectLookupParameters
++from django.contrib.admin.util import quote, get_fields_from_path
+ 
+ # The system will display a "Show all" link on the change list only if the
+ # total result count is less than or equal to this setting.
+@@ -23,6 +25,9 @@ TO_FIELD_VAR = 't'
+ IS_POPUP_VAR = 'pop'
+ ERROR_FLAG = 'e'
+ 
++IGNORED_PARAMS = (
++    ALL_VAR, ORDER_VAR, ORDER_TYPE_VAR, SEARCH_VAR, IS_POPUP_VAR, TO_FIELD_VAR)
++
+ # Text to display within change-list table cells if the value is blank.
+ EMPTY_CHANGELIST_VALUE = ugettext_lazy('(None)')
+ 
+@@ -36,7 +41,9 @@ def field_needs_distinct(field):
+ 
+ 
+ class ChangeList(object):
+-    def __init__(self, request, model, list_display, list_display_links, list_filter, date_hierarchy, search_fields, list_select_related, list_per_page, list_editable, model_admin):
++    def __init__(self, request, model, list_display, list_display_links,
++            list_filter, date_hierarchy, search_fields, list_select_related,
++            list_per_page, list_editable, model_admin):
+         self.model = model
+         self.opts = model._meta
+         self.lookup_opts = self.opts
+@@ -70,20 +77,39 @@ class ChangeList(object):
+             self.list_editable = list_editable
+         self.order_field, self.order_type = self.get_ordering()
+         self.query = request.GET.get(SEARCH_VAR, '')
+-        self.query_set = self.get_query_set()
++        self.query_set = self.get_query_set(request)
+         self.get_results(request)
+-        self.title = (self.is_popup and ugettext('Select %s') % force_unicode(self.opts.verbose_name) or ugettext('Select %s to change') % force_unicode(self.opts.verbose_name))
+-        self.filter_specs, self.has_filters = self.get_filters(request)
++        if self.is_popup:
++            title = ugettext('Select %s')
++        else:
++            title = ugettext('Select %s to change')
++        self.title = title % force_unicode(self.opts.verbose_name)
+         self.pk_attname = self.lookup_opts.pk.attname
+ 
+-    def get_filters(self, request):
++    def get_filters(self, request, use_distinct=False):
+         filter_specs = []
++        cleaned_params, use_distinct = self.get_lookup_params(use_distinct)
+         if self.list_filter:
+-            for filter_name in self.list_filter:
+-                field = get_fields_from_path(self.model, filter_name)[-1]
+-                spec = FilterSpec.create(field, request, self.params,
+-                                         self.model, self.model_admin,
+-                                         field_path=filter_name)
++            for list_filer in self.list_filter:
++                if callable(list_filer):                                           ############################callable
++                    # This is simply a custom list filter class.
++                    spec = list_filer(request, cleaned_params,
++                        self.model, self.model_admin)
++                else:
++                    field_path = None
++                    try:
++                        # This is custom FieldListFilter class for a given field.
++                        field, field_list_filter_class = list_filer
++                    except (TypeError, ValueError):
++                        # This is simply a field name, so use the default
++                        # FieldListFilter class that has been registered for
++                        # the type of the given field.
++                        field, field_list_filter_class = list_filer, FieldListFilter.create
++                    if not isinstance(field, models.Field):                           ############################isinstance
++                        field_path = field
++                        field = get_fields_from_path(self.model, field_path)[-1]
++                    spec = field_list_filter_class(field, request, cleaned_params,
++                        self.model, self.model_admin, field_path=field_path)
+                 if spec and spec.has_output():
+                     filter_specs.append(spec)
+         return filter_specs, bool(filter_specs)
+@@ -175,14 +201,13 @@ class ChangeList(object):
+             order_type = params[ORDER_TYPE_VAR]
+         return order_field, order_type
+ 
+-    def get_query_set(self):
+-        use_distinct = False
+-
+-        qs = self.root_query_set
++    def get_lookup_params(self, use_distinct=False):
+         lookup_params = self.params.copy() # a dictionary of the query string
+-        for i in (ALL_VAR, ORDER_VAR, ORDER_TYPE_VAR, SEARCH_VAR, IS_POPUP_VAR, TO_FIELD_VAR):
+-            if i in lookup_params:
+-                del lookup_params[i]                                            ############################del
++
++        for ignored in IGNORED_PARAMS:
++            if ignored in lookup_params:
++                del lookup_params[ignored]                                       ############################del
++
+         for key, value in lookup_params.items():
+             if not isinstance(key, str):
+                 # 'key' will be used as a keyword argument later, so Python
+@@ -195,10 +220,11 @@ class ChangeList(object):
+                 # instance
+                 field_name = key.split('__', 1)[0]
+                 try:
+-                    f = self.lookup_opts.get_field_by_name(field_name)[0]
++                    field = self.lookup_opts.get_field_by_name(field_name)[0]
++                    use_distinct = field_needs_distinct(field)
+                 except models.FieldDoesNotExist:
+-                    raise IncorrectLookupParameters
+-                use_distinct = field_needs_distinct(f)
++                    # It might be a custom NonFieldFilter
++                    pass
+ 
+             # if key ends with __in, split parameter into separate values
+             if key.endswith('__in'):
+@@ -214,11 +240,28 @@ class ChangeList(object):
+                 lookup_params[key] = value
+ 
+             if not self.model_admin.lookup_allowed(key, value):
+-                raise SuspiciousOperation(
+-                    "Filtering by %s not allowed" % key
+-                )
++                raise SuspiciousOperation("Filtering by %s not allowed" % key)
++
++        return lookup_params, use_distinct
++
++    def get_query_set(self, request):
++        lookup_params, use_distinct = self.get_lookup_params(use_distinct=False)
++        self.filter_specs, self.has_filters = self.get_filters(request, use_distinct)
++
++        # Let every list filter modify the qs and params to its liking
++        qs = self.root_query_set
++        for filter_spec in self.filter_specs:
++            new_qs = filter_spec.queryset(request, qs)
++            if new_qs is not None:
++                qs = new_qs
++                for param in filter_spec.used_params():
++                    try:
++                        del lookup_params[param]                   ############################del
++                    except KeyError:
++                        pass
+ 
+-        # Apply lookup parameters from the query string.
++        # Apply the remaining lookup parameters from the query string (i.e.
++        # those that haven't already been processed by the filters).
+         try:
+             qs = qs.filter(**lookup_params)
+         # Naked except! Because we don't have any other way of validating "params".
+@@ -226,8 +269,8 @@ class ChangeList(object):
+         # values are not in the correct type, so we might get FieldError, ValueError,
+         # ValicationError, or ? from a custom field that raises yet something else
+         # when handed impossible data.
+-        except:
+-            raise IncorrectLookupParameters
++        except Exception, e:
++            raise IncorrectLookupParameters(e)
+ 
+         # Use select_related() if one of the list_display options is a field
+         # with a relationship and the provided queryset doesn't already have
+@@ -238,11 +281,11 @@ class ChangeList(object):
+             else:
+                 for field_name in self.list_display:
+                     try:
+-                        f = self.lookup_opts.get_field(field_name)
++                        field = self.lookup_opts.get_field(field_name)
+                     except models.FieldDoesNotExist:
+                         pass
+                     else:
+-                        if isinstance(f.rel, models.ManyToOneRel):                        ############################isinstance
++                        if isinstance(field.rel, models.ManyToOneRel):                     ############################isinstance
+                             qs = qs.select_related()
+                             break
+ 
+diff --git a/django/db/models/related.py b/django/db/models/related.py
+index 7734230..90995d7 100644
+--- a/django/db/models/related.py
++++ b/django/db/models/related.py
+@@ -27,7 +27,7 @@ class RelatedObject(object):
+         as SelectField choices for this field.
+ 
+         Analogue of django.db.models.fields.Field.get_choices, provided
+-        initially for utilisation by RelatedFilterSpec.
++        initially for utilisation by RelatedFieldListFilter.
+         """
+         first_choice = include_blank and blank_choice or []
+         queryset = self.model._default_manager.all()
+diff --git a/docs/ref/contrib/admin/index.txt b/docs/ref/contrib/admin/index.txt
+index 633c53f..0d28cc4 100644
+--- a/docs/ref/contrib/admin/index.txt
++++ b/docs/ref/contrib/admin/index.txt
+@@ -525,30 +525,113 @@ subclass::
+ 
+ .. attribute:: ModelAdmin.list_filter
+ 
+-    Set ``list_filter`` to activate filters in the right sidebar of the change
+-    list page of the admin. This should be a list of field names, and each
+-    specified field should be either a ``BooleanField``, ``CharField``,
+-    ``DateField``, ``DateTimeField``, ``IntegerField`` or ``ForeignKey``.
+-
+-    This example, taken from the ``django.contrib.auth.models.User`` model,
+-    shows how both ``list_display`` and ``list_filter`` work::
++    .. versionchanged:: 1.4
+ 
+-        class UserAdmin(admin.ModelAdmin):
+-            list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff')
+-            list_filter = ('is_staff', 'is_superuser')
+-
+-    The above code results in an admin change list page that looks like this:
++    Set ``list_filter`` to activate filters in the right sidebar of the change
++    list page of the admin, as illustrated in the following screenshot:
+ 
+         .. image:: _images/users_changelist.png
+ 
+-    (This example also has ``search_fields`` defined. See below.)
+-
+-    .. versionadded:: 1.3
+-
+-    Fields in ``list_filter`` can also span relations using the ``__`` lookup::
+-
+-        class UserAdminWithLookup(UserAdmin):
+-            list_filter = ('groups__name')
++    ``list_filter`` should be a list of elements, where each element should be
++    of one of the following types:
++
++        * a field name, where the specified field should be either a
++          ``BooleanField``, ``CharField``, ``DateField``, ``DateTimeField``,
++          ``IntegerField``, ``ForeignKey`` or ``ManyToManyField``, for example::
++
++              class PersonAdmin(ModelAdmin):
++                  list_filter = ('is_staff', 'company')
++
++          .. versionadded:: 1.3
++
++          Field names in ``list_filter`` can also span relations
++          using the ``__`` lookup, for example::
++
++              class PersonAdmin(UserAdmin):
++                  list_filter = ('company__name',)
++
++        * a class inheriting from :mod:`django.contrib.admin.SimpleListFilter`,
++          which you need to provide the ``title`` and ``parameter_name``
++          attributes to and override the ``lookups`` and ``queryset`` methods,
++          e.g.::
++
++               from django.db.models import Q
++               from django.utils.translation import ugettext_lazy as _
++
++               from django.contrib.admin import SimpleListFilter
++
++               class DecadeBornListFilter(SimpleListFilter):
++                   # Human-readable title which will be displayed in the
++                   # right admin sidebar just above the filter options.
++                   title = _('decade born')
++
++                   # Parameter for the filter that will be used in the URL query.
++                   parameter_name = 'decade'
++
++                   def lookups(self, request):
++                       """
++                       Returns a list of tuples. The first element in each
++                       tuple is the coded value for the option that will
++                       appear in the URL query. The second element is the
++                       human-readable name for the option that will appear
++                       in the right sidebar.
++                       """
++                       return (
++                           ('80s', 'in the eighties'),
++                           ('other', 'other'),
++                       )
++
++                   def queryset(self, request, queryset):
++                       """
++                       Returns the filtered queryset based on the value
++                       provided in the query string and retrievable via
++                       ``value()``.
++                       """
++                       # Compare the requested value (either '80s' or 'other')
++                       # to decide how to filter the queryset.
++                       if self.value() == '80s':
++                           return queryset.filter(birthday__year__gte=1980,
++                                                   birthday__year__lte=1989)
++                       if self.value() == 'other':
++                           return queryset.filter(Q(year__lte=1979) |
++                                                   Q(year__gte=1990))
++
++               class PersonAdmin(ModelAdmin):
++                   list_filter = (DecadeBornListFilter,)
++
++          .. note::
++
++              As a convenience, the ``HttpRequest`` object is passed to the
++              filter's methods, for example::
++
++                  class AuthDecadeBornListFilter(DecadeBornListFilter):
++
++                      def lookups(self, request):
++                          if request.user.is_authenticated():
++                              return (
++                                  ('80s', 'in the eighties'),
++                                  ('other', 'other'),
++                              )
++                          else:
++                              return (
++                                  ('90s', 'in the nineties'),
++                              )
++
++        * a tuple, where the first element is a field name and the second
++          element is a class inheriting from
++          :mod:`django.contrib.admin.FieldListFilter`, for example::
++
++              from django.contrib.admin import BooleanFieldListFilter
++
++              class PersonAdmin(ModelAdmin):
++                  list_filter = (
++                      ('is_staff', BooleanFieldListFilter),
++                  )
++
++          .. note::
++
++              The ``FieldListFilter`` API is currently considered internal
++              and prone to refactoring.
+ 
+ .. attribute:: ModelAdmin.list_per_page
+ 
+diff --git a/docs/releases/1.4.txt b/docs/releases/1.4.txt
+index 617c3ad..d02231c 100644
+--- a/docs/releases/1.4.txt
++++ b/docs/releases/1.4.txt
+@@ -37,6 +37,15 @@ compatibility with old browsers, this change means that you can use any HTML5
+ features you need in admin pages without having to lose HTML validity or
+ override the provided templates to change the doctype.
+ 
++List filters in admin interface
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++Prior to Django 1.4, the Django admin app allowed specifying change list
++filters by specifying a field lookup (including spanning relations), and
++not custom filters. This has been rectified with a simple API previously
++known as "FilterSpec" which was used internally. For more details, see the
++documentation for :attr:`~django.contrib.admin.ModelAdmin.list_filter`.
++
+ ``reverse_lazy``
+ ~~~~~~~~~~~~~~~~
+ 
+diff --git a/tests/regressiontests/admin_filters/__init__.py b/tests/regressiontests/admin_filters/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/regressiontests/admin_filters/models.py b/tests/regressiontests/admin_filters/models.py
+new file mode 100644
+index 0000000..80d54c7
+--- /dev/null
++++ b/tests/regressiontests/admin_filters/models.py
+@@ -0,0 +1,13 @@
++from django.db import models
++from django.contrib.auth.models import User
++
++class Book(models.Model):
++    title = models.CharField(max_length=50)
++    year = models.PositiveIntegerField(null=True, blank=True)
++    author = models.ForeignKey(User, related_name='books_authored', blank=True, null=True)
++    contributors = models.ManyToManyField(User, related_name='books_contributed', blank=True, null=True)
++    is_best_seller = models.NullBooleanField(default=0)
++    date_registered = models.DateField(null=True)
++
++    def __unicode__(self):
++        return self.title
+diff --git a/tests/regressiontests/admin_filters/tests.py b/tests/regressiontests/admin_filters/tests.py
+new file mode 100644
+index 0000000..b1bd6de
+--- /dev/null
++++ b/tests/regressiontests/admin_filters/tests.py
+@@ -0,0 +1,455 @@
++from __future__ import with_statement
++
++import datetime
++
++from django.core.exceptions import ImproperlyConfigured
++from django.test import TestCase, RequestFactory
++from django.utils.encoding import force_unicode
++
++from django.contrib.auth.admin import UserAdmin
++from django.contrib.auth.models import User
++from django.contrib.admin.views.main import ChangeList
++from django.contrib.admin import site, ModelAdmin, SimpleListFilter
++
++from models import Book
++
++def select_by(dictlist, key, value):
++    return [x for x in dictlist if x[key] == value][0]
++
++
++class DecadeListFilter(SimpleListFilter):
++
++    def lookups(self, request):
++        return (
++            ('the 90s', "the 1990's"),
++            ('the 00s', "the 2000's"),
++            ('other', "other decades"),
++        )
++
++    def queryset(self, request, queryset):
++        decade = self.value()
++        if decade == 'the 90s':
++            return queryset.filter(year__gte=1990, year__lte=1999)
++        if decade == 'the 00s':
++            return queryset.filter(year__gte=2000, year__lte=2009)
++
++class DecadeListFilterWithTitleAndParameter(DecadeListFilter):
++    title = 'publication decade'
++    parameter_name = 'publication-decade'
++
++class DecadeListFilterWithoutTitle(DecadeListFilter):
++    parameter_name = 'publication-decade'
++
++class DecadeListFilterWithoutParameter(DecadeListFilter):
++    title = 'publication decade'
++
++class CustomUserAdmin(UserAdmin):
++    list_filter = ('books_authored', 'books_contributed')
++
++class BookAdmin(ModelAdmin):
++    list_filter = ('year', 'author', 'contributors', 'is_best_seller', 'date_registered')
++    order_by = '-id'
++
++class DecadeFilterBookAdmin(ModelAdmin):
++    list_filter = ('author', DecadeListFilterWithTitleAndParameter)
++    order_by = '-id'
++
++class DecadeFilterBookAdminWithoutTitle(ModelAdmin):
++    list_filter = (DecadeListFilterWithoutTitle,)
++
++class DecadeFilterBookAdminWithoutParameter(ModelAdmin):
++    list_filter = (DecadeListFilterWithoutParameter,)
++
++class ListFiltersTests(TestCase):
++
++    def setUp(self):
++        self.today = datetime.date.today()
++        self.one_week_ago = self.today - datetime.timedelta(days=7)
++
++        self.request_factory = RequestFactory()
++
++        # Users
++        self.alfred = User.objects.create_user('alfred', 'alfred@example.com')
++        self.bob = User.objects.create_user('bob', 'bob@example.com')
++        self.lisa = User.objects.create_user('lisa', 'lisa@example.com')
++
++        # Books
++        self.djangonaut_book = Book.objects.create(title='Djangonaut: an art of living', year=2009, author=self.alfred, is_best_seller=True, date_registered=self.today)
++        self.bio_book = Book.objects.create(title='Django: a biography', year=1999, author=self.alfred, is_best_seller=False)
++        self.django_book = Book.objects.create(title='The Django Book', year=None, author=self.bob, is_best_seller=None, date_registered=self.today)
++        self.gipsy_book = Book.objects.create(title='Gipsy guitar for dummies', year=2002, is_best_seller=True, date_registered=self.one_week_ago)
++        self.gipsy_book.contributors = [self.bob, self.lisa]
++        self.gipsy_book.save()
++
++    def get_changelist(self, request, model, modeladmin):
++        return ChangeList(request, model, modeladmin.list_display, modeladmin.list_display_links,
++            modeladmin.list_filter, modeladmin.date_hierarchy, modeladmin.search_fields,
++            modeladmin.list_select_related, modeladmin.list_per_page, modeladmin.list_editable, modeladmin)
++
++    def test_datefieldlistfilter(self):
++        modeladmin = BookAdmin(Book, site)
++
++        request = self.request_factory.get('/')
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        request = self.request_factory.get('/', {'date_registered__year': self.today.year,
++                                                 'date_registered__month': self.today.month,
++                                                 'date_registered__day': self.today.day})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.django_book, self.djangonaut_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][4]
++        self.assertEqual(force_unicode(filterspec.title), u'date_registered')
++        choice = select_by(filterspec.choices(changelist), "display", "Today")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?date_registered__day=%s'
++                                                 '&date_registered__month=%s'
++                                                 '&date_registered__year=%s'
++                                                % (self.today.day, self.today.month, self.today.year))
++
++        request = self.request_factory.get('/', {'date_registered__year': self.today.year,
++                                                 'date_registered__month': self.today.month})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        if (self.today.year, self.today.month) == (self.one_week_ago.year, self.one_week_ago.month):
++            # In case one week ago is in the same month.
++            self.assertEqual(list(queryset), [self.gipsy_book, self.django_book, self.djangonaut_book])
++        else:
++            self.assertEqual(list(queryset), [self.django_book, self.djangonaut_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][4]
++        self.assertEqual(force_unicode(filterspec.title), u'date_registered')
++        choice = select_by(filterspec.choices(changelist), "display", "This month")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?date_registered__month=%s'
++                                                 '&date_registered__year=%s'
++                                                % (self.today.month, self.today.year))
++
++        request = self.request_factory.get('/', {'date_registered__year': self.today.year})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        if self.today.year == self.one_week_ago.year:
++            # In case one week ago is in the same year.
++            self.assertEqual(list(queryset), [self.gipsy_book, self.django_book, self.djangonaut_book])
++        else:
++            self.assertEqual(list(queryset), [self.django_book, self.djangonaut_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][4]
++        self.assertEqual(force_unicode(filterspec.title), u'date_registered')
++        choice = select_by(filterspec.choices(changelist), "display", "This year")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?date_registered__year=%s'
++                                                % (self.today.year))
++
++        request = self.request_factory.get('/', {'date_registered__gte': self.one_week_ago.strftime('%Y-%m-%d'),
++                                                 'date_registered__lte': self.today.strftime('%Y-%m-%d')})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.gipsy_book, self.django_book, self.djangonaut_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][4]
++        self.assertEqual(force_unicode(filterspec.title), u'date_registered')
++        choice = select_by(filterspec.choices(changelist), "display", "Past 7 days")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?date_registered__gte=%s'
++                                                 '&date_registered__lte=%s'
++                                                % (self.one_week_ago.strftime('%Y-%m-%d'), self.today.strftime('%Y-%m-%d')))
++
++    def test_allvaluesfieldlistfilter(self):
++        modeladmin = BookAdmin(Book, site)
++
++        request = self.request_factory.get('/', {'year__isnull': 'True'})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.django_book])
++
++        # Make sure the last choice is None and is selected
++        filterspec = changelist.get_filters(request)[0][0]
++        self.assertEqual(force_unicode(filterspec.title), u'year')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[-1]['selected'], True)
++        self.assertEqual(choices[-1]['query_string'], '?year__isnull=True')
++
++        request = self.request_factory.get('/', {'year': '2002'})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][0]
++        self.assertEqual(force_unicode(filterspec.title), u'year')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[2]['selected'], True)
++        self.assertEqual(choices[2]['query_string'], '?year=2002')
++
++    def test_relatedfieldlistfilter_foreignkey(self):
++        modeladmin = BookAdmin(Book, site)
++
++        request = self.request_factory.get('/', {'author__isnull': 'True'})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.gipsy_book])
++
++        # Make sure the last choice is None and is selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'author')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[-1]['selected'], True)
++        self.assertEqual(choices[-1]['query_string'], '?author__isnull=True')
++
++        request = self.request_factory.get('/', {'author__id__exact': self.alfred.pk})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'author')
++        # order of choices depends on User model, which has no order
++        choice = select_by(filterspec.choices(changelist), "display", "alfred")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?author__id__exact=%d' % self.alfred.pk)
++
++    def test_relatedfieldlistfilter_manytomany(self):
++        modeladmin = BookAdmin(Book, site)
++
++        request = self.request_factory.get('/', {'contributors__isnull': 'True'})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.django_book, self.bio_book, self.djangonaut_book])
++
++        # Make sure the last choice is None and is selected
++        filterspec = changelist.get_filters(request)[0][2]
++        self.assertEqual(force_unicode(filterspec.title), u'user')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[-1]['selected'], True)
++        self.assertEqual(choices[-1]['query_string'], '?contributors__isnull=True')
++
++        request = self.request_factory.get('/', {'contributors__id__exact': self.bob.pk})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][2]
++        self.assertEqual(force_unicode(filterspec.title), u'user')
++        choice = select_by(filterspec.choices(changelist), "display", "bob")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?contributors__id__exact=%d' % self.bob.pk)
++
++    def test_relatedfieldlistfilter_reverse_relationships(self):
++        modeladmin = CustomUserAdmin(User, site)
++
++        # FK relationship -----
++        request = self.request_factory.get('/', {'books_authored__isnull': 'True'})
++        changelist = self.get_changelist(request, User, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.lisa])
++
++        # Make sure the last choice is None and is selected
++        filterspec = changelist.get_filters(request)[0][0]
++        self.assertEqual(force_unicode(filterspec.title), u'book')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[-1]['selected'], True)
++        self.assertEqual(choices[-1]['query_string'], '?books_authored__isnull=True')
++
++        request = self.request_factory.get('/', {'books_authored__id__exact': self.bio_book.pk})
++        changelist = self.get_changelist(request, User, modeladmin)
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][0]
++        self.assertEqual(force_unicode(filterspec.title), u'book')
++        choice = select_by(filterspec.choices(changelist), "display", self.bio_book.title)
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?books_authored__id__exact=%d' % self.bio_book.pk)
++
++        # M2M relationship -----
++        request = self.request_factory.get('/', {'books_contributed__isnull': 'True'})
++        changelist = self.get_changelist(request, User, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.alfred])
++
++        # Make sure the last choice is None and is selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'book')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[-1]['selected'], True)
++        self.assertEqual(choices[-1]['query_string'], '?books_contributed__isnull=True')
++
++        request = self.request_factory.get('/', {'books_contributed__id__exact': self.django_book.pk})
++        changelist = self.get_changelist(request, User, modeladmin)
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'book')
++        choice = select_by(filterspec.choices(changelist), "display", self.django_book.title)
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?books_contributed__id__exact=%d' % self.django_book.pk)
++
++    def test_booleanfieldlistfilter(self):
++        modeladmin = BookAdmin(Book, site)
++        self.verify_booleanfieldlistfilter(modeladmin)
++
++    def test_booleanfieldlistfilter_tuple(self):
++        modeladmin = BookAdmin(Book, site)
++        self.verify_booleanfieldlistfilter(modeladmin)
++
++    def verify_booleanfieldlistfilter(self, modeladmin):
++        request = self.request_factory.get('/')
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        request = self.request_factory.get('/', {'is_best_seller__exact': 0})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.bio_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][3]
++        self.assertEqual(force_unicode(filterspec.title), u'is_best_seller')
++        choice = select_by(filterspec.choices(changelist), "display", "No")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?is_best_seller__exact=0')
++
++        request = self.request_factory.get('/', {'is_best_seller__exact': 1})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.gipsy_book, self.djangonaut_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][3]
++        self.assertEqual(force_unicode(filterspec.title), u'is_best_seller')
++        choice = select_by(filterspec.choices(changelist), "display", "Yes")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?is_best_seller__exact=1')
++
++        request = self.request_factory.get('/', {'is_best_seller__isnull': 'True'})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.django_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][3]
++        self.assertEqual(force_unicode(filterspec.title), u'is_best_seller')
++        choice = select_by(filterspec.choices(changelist), "display", "Unknown")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?is_best_seller__isnull=True')
++
++    def test_simplelistfilter(self):
++        modeladmin = DecadeFilterBookAdmin(Book, site)
++
++        # Make sure that the first option is 'All' ---------------------------
++
++        request = self.request_factory.get('/', {})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), list(Book.objects.all().order_by('-id')))
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'publication decade')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[0]['display'], u'All')
++        self.assertEqual(choices[0]['selected'], True)
++        self.assertEqual(choices[0]['query_string'], '?')
++
++        # Look for books in the 1990s ----------------------------------------
++
++        request = self.request_factory.get('/', {'publication-decade': 'the 90s'})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.bio_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'publication decade')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[1]['display'], u'the 1990\'s')
++        self.assertEqual(choices[1]['selected'], True)
++        self.assertEqual(choices[1]['query_string'], '?publication-decade=the+90s')
++
++        # Look for books in the 2000s ----------------------------------------
++
++        request = self.request_factory.get('/', {'publication-decade': 'the 00s'})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.gipsy_book, self.djangonaut_book])
++
++        # Make sure the correct choice is selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'publication decade')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[2]['display'], u'the 2000\'s')
++        self.assertEqual(choices[2]['selected'], True)
++        self.assertEqual(choices[2]['query_string'], '?publication-decade=the+00s')
++
++        # Combine multiple filters -------------------------------------------
++
++        request = self.request_factory.get('/', {'publication-decade': 'the 00s', 'author__id__exact': self.alfred.pk})
++        changelist = self.get_changelist(request, Book, modeladmin)
++
++        # Make sure the correct queryset is returned
++        queryset = changelist.get_query_set(request)
++        self.assertEqual(list(queryset), [self.djangonaut_book])
++
++        # Make sure the correct choices are selected
++        filterspec = changelist.get_filters(request)[0][1]
++        self.assertEqual(force_unicode(filterspec.title), u'publication decade')
++        choices = list(filterspec.choices(changelist))
++        self.assertEqual(choices[2]['display'], u'the 2000\'s')
++        self.assertEqual(choices[2]['selected'], True)
++        self.assertEqual(choices[2]['query_string'], '?publication-decade=the+00s&author__id__exact=%s' % self.alfred.pk)
++
++        filterspec = changelist.get_filters(request)[0][0]
++        self.assertEqual(force_unicode(filterspec.title), u'author')
++        choice = select_by(filterspec.choices(changelist), "display", "alfred")
++        self.assertEqual(choice['selected'], True)
++        self.assertEqual(choice['query_string'], '?publication-decade=the+00s&author__id__exact=%s' % self.alfred.pk)
++
++    def test_listfilter_without_title(self):
++        """
++        Any filter must define a title.
++        """
++        modeladmin = DecadeFilterBookAdminWithoutTitle(Book, site)
++        request = self.request_factory.get('/', {})
++        self.assertRaisesRegexp(ImproperlyConfigured,
++            "The list filter 'DecadeListFilterWithoutTitle' does not specify a 'title'.",
++            self.get_changelist, request, Book, modeladmin)
++
++    def test_simplelistfilter_without_parameter(self):
++        """
++        Any SimpleListFilter must define a parameter_name.
++        """
++        modeladmin = DecadeFilterBookAdminWithoutParameter(Book, site)
++        request = self.request_factory.get('/', {})
++        self.assertRaisesRegexp(ImproperlyConfigured,
++            "The list filter 'DecadeListFilterWithoutParameter' does not specify a 'parameter_name'.",
++            self.get_changelist, request, Book, modeladmin)
+diff --git a/tests/regressiontests/admin_filterspecs/__init__.py b/tests/regressiontests/admin_filterspecs/__init__.py
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/tests/regressiontests/admin_filterspecs/models.py b/tests/regressiontests/admin_filterspecs/models.py
+deleted file mode 100644
+index 5b284c7..0000000
+--- a/tests/regressiontests/admin_filterspecs/models.py
++++ /dev/null
+@@ -1,23 +0,0 @@
+-from django.db import models
+-from django.contrib.auth.models import User
+-
+-class Book(models.Model):
+-    title = models.CharField(max_length=25)
+-    year = models.PositiveIntegerField(null=True, blank=True)
+-    author = models.ForeignKey(User, related_name='books_authored', blank=True, null=True)
+-    contributors = models.ManyToManyField(User, related_name='books_contributed', blank=True, null=True)
+-
+-    def __unicode__(self):
+-        return self.title
+-
+-class BoolTest(models.Model):
+-    NO = False
+-    YES = True
+-    YES_NO_CHOICES = (
+-        (NO, 'no'),
+-        (YES, 'yes')
+-    )
+-    completed = models.BooleanField(
+-        default=NO,
+-        choices=YES_NO_CHOICES
+-    )
+diff --git a/tests/regressiontests/admin_filterspecs/tests.py b/tests/regressiontests/admin_filterspecs/tests.py
+deleted file mode 100644
+index 8b9e734..0000000
+--- a/tests/regressiontests/admin_filterspecs/tests.py
++++ /dev/null
+@@ -1,211 +0,0 @@
+-from django.contrib.auth.admin import UserAdmin
+-from django.test import TestCase
+-from django.test.client import RequestFactory
+-from django.contrib.auth.models import User
+-from django.contrib import admin
+-from django.contrib.admin.views.main import ChangeList
+-from django.utils.encoding import force_unicode
+-
+-from models import Book, BoolTest
+-
+-def select_by(dictlist, key, value):
+-    return [x for x in dictlist if x[key] == value][0]
+-
+-class FilterSpecsTests(TestCase):
+-
+-    def setUp(self):
+-        # Users
+-        self.alfred = User.objects.create_user('alfred', 'alfred@example.com')
+-        self.bob = User.objects.create_user('bob', 'bob@example.com')
+-        lisa = User.objects.create_user('lisa', 'lisa@example.com')
+-
+-        #Books
+-        self.bio_book = Book.objects.create(title='Django: a biography', year=1999, author=self.alfred)
+-        self.django_book = Book.objects.create(title='The Django Book', year=None, author=self.bob)
+-        gipsy_book = Book.objects.create(title='Gipsy guitar for dummies', year=2002)
+-        gipsy_book.contributors = [self.bob, lisa]
+-        gipsy_book.save()
+-
+-        # BoolTests
+-        self.trueTest = BoolTest.objects.create(completed=True)
+-        self.falseTest = BoolTest.objects.create(completed=False)
+-
+-        self.request_factory = RequestFactory()
+-
+-
+-    def get_changelist(self, request, model, modeladmin):
+-        return ChangeList(request, model, modeladmin.list_display, modeladmin.list_display_links,
+-            modeladmin.list_filter, modeladmin.date_hierarchy, modeladmin.search_fields,
+-            modeladmin.list_select_related, modeladmin.list_per_page, modeladmin.list_editable, modeladmin)
+-
+-    def test_AllValuesFilterSpec(self):
+-        modeladmin = BookAdmin(Book, admin.site)
+-
+-        request = self.request_factory.get('/', {'year__isnull': 'True'})
+-        changelist = self.get_changelist(request, Book, modeladmin)
+-
+-        # Make sure changelist.get_query_set() does not raise IncorrectLookupParameters
+-        queryset = changelist.get_query_set()
+-
+-        # Make sure the last choice is None and is selected
+-        filterspec = changelist.get_filters(request)[0][0]
+-        self.assertEqual(force_unicode(filterspec.title()), u'year')
+-        choices = list(filterspec.choices(changelist))
+-        self.assertEqual(choices[-1]['selected'], True)
+-        self.assertEqual(choices[-1]['query_string'], '?year__isnull=True')
+-
+-        request = self.request_factory.get('/', {'year': '2002'})
+-        changelist = self.get_changelist(request, Book, modeladmin)
+-
+-        # Make sure the correct choice is selected
+-        filterspec = changelist.get_filters(request)[0][0]
+-        self.assertEqual(force_unicode(filterspec.title()), u'year')
+-        choices = list(filterspec.choices(changelist))
+-        self.assertEqual(choices[2]['selected'], True)
+-        self.assertEqual(choices[2]['query_string'], '?year=2002')
+-
+-    def test_RelatedFilterSpec_ForeignKey(self):
+-        modeladmin = BookAdmin(Book, admin.site)
+-
+-        request = self.request_factory.get('/', {'author__isnull': 'True'})
+-        changelist = ChangeList(request, Book, modeladmin.list_display, modeladmin.list_display_links,
+-            modeladmin.list_filter, modeladmin.date_hierarchy, modeladmin.search_fields,
+-            modeladmin.list_select_related, modeladmin.list_per_page, modeladmin.list_editable, modeladmin)
+-
+-        # Make sure changelist.get_query_set() does not raise IncorrectLookupParameters
+-        queryset = changelist.get_query_set()
+-
+-        # Make sure the last choice is None and is selected
+-        filterspec = changelist.get_filters(request)[0][1]
+-        self.assertEqual(force_unicode(filterspec.title()), u'author')
+-        choices = list(filterspec.choices(changelist))
+-        self.assertEqual(choices[-1]['selected'], True)
+-        self.assertEqual(choices[-1]['query_string'], '?author__isnull=True')
+-
+-        request = self.request_factory.get('/', {'author__id__exact': self.alfred.pk})
+-        changelist = self.get_changelist(request, Book, modeladmin)
+-
+-        # Make sure the correct choice is selected
+-        filterspec = changelist.get_filters(request)[0][1]
+-        self.assertEqual(force_unicode(filterspec.title()), u'author')
+-        # order of choices depends on User model, which has no order
+-        choice = select_by(filterspec.choices(changelist), "display", "alfred")
+-        self.assertEqual(choice['selected'], True)
+-        self.assertEqual(choice['query_string'], '?author__id__exact=%d' % self.alfred.pk)
+-
+-    def test_RelatedFilterSpec_ManyToMany(self):
+-        modeladmin = BookAdmin(Book, admin.site)
+-
+-        request = self.request_factory.get('/', {'contributors__isnull': 'True'})
+-        changelist = self.get_changelist(request, Book, modeladmin)
+-
+-        # Make sure changelist.get_query_set() does not raise IncorrectLookupParameters
+-        queryset = changelist.get_query_set()
+-
+-        # Make sure the last choice is None and is selected
+-        filterspec = changelist.get_filters(request)[0][2]
+-        self.assertEqual(force_unicode(filterspec.title()), u'user')
+-        choices = list(filterspec.choices(changelist))
+-        self.assertEqual(choices[-1]['selected'], True)
+-        self.assertEqual(choices[-1]['query_string'], '?contributors__isnull=True')
+-
+-        request = self.request_factory.get('/', {'contributors__id__exact': self.bob.pk})
+-        changelist = self.get_changelist(request, Book, modeladmin)
+-
+-        # Make sure the correct choice is selected
+-        filterspec = changelist.get_filters(request)[0][2]
+-        self.assertEqual(force_unicode(filterspec.title()), u'user')
+-        choice = select_by(filterspec.choices(changelist), "display", "bob")
+-        self.assertEqual(choice['selected'], True)
+-        self.assertEqual(choice['query_string'], '?contributors__id__exact=%d' % self.bob.pk)
+-
+-
+-    def test_RelatedFilterSpec_reverse_relationships(self):
+-        modeladmin = CustomUserAdmin(User, admin.site)
+-
+-        # FK relationship -----
+-        request = self.request_factory.get('/', {'books_authored__isnull': 'True'})
+-        changelist = self.get_changelist(request, User, modeladmin)
+-
+-        # Make sure changelist.get_query_set() does not raise IncorrectLookupParameters
+-        queryset = changelist.get_query_set()
+-
+-        # Make sure the last choice is None and is selected
+-        filterspec = changelist.get_filters(request)[0][0]
+-        self.assertEqual(force_unicode(filterspec.title()), u'book')
+-        choices = list(filterspec.choices(changelist))
+-        self.assertEqual(choices[-1]['selected'], True)
+-        self.assertEqual(choices[-1]['query_string'], '?books_authored__isnull=True')
+-
+-        request = self.request_factory.get('/', {'books_authored__id__exact': self.bio_book.pk})
+-        changelist = self.get_changelist(request, User, modeladmin)
+-
+-        # Make sure the correct choice is selected
+-        filterspec = changelist.get_filters(request)[0][0]
+-        self.assertEqual(force_unicode(filterspec.title()), u'book')
+-        choice = select_by(filterspec.choices(changelist), "display", self.bio_book.title)
+-        self.assertEqual(choice['selected'], True)
+-        self.assertEqual(choice['query_string'], '?books_authored__id__exact=%d' % self.bio_book.pk)
+-
+-        # M2M relationship -----
+-        request = self.request_factory.get('/', {'books_contributed__isnull': 'True'})
+-        changelist = self.get_changelist(request, User, modeladmin)
+-
+-        # Make sure changelist.get_query_set() does not raise IncorrectLookupParameters
+-        queryset = changelist.get_query_set()
+-
+-        # Make sure the last choice is None and is selected
+-        filterspec = changelist.get_filters(request)[0][1]
+-        self.assertEqual(force_unicode(filterspec.title()), u'book')
+-        choices = list(filterspec.choices(changelist))
+-        self.assertEqual(choices[-1]['selected'], True)
+-        self.assertEqual(choices[-1]['query_string'], '?books_contributed__isnull=True')
+-
+-        request = self.request_factory.get('/', {'books_contributed__id__exact': self.django_book.pk})
+-        changelist = self.get_changelist(request, User, modeladmin)
+-
+-        # Make sure the correct choice is selected
+-        filterspec = changelist.get_filters(request)[0][1]
+-        self.assertEqual(force_unicode(filterspec.title()), u'book')
+-        choice = select_by(filterspec.choices(changelist), "display", self.django_book.title)
+-        self.assertEqual(choice['selected'], True)
+-        self.assertEqual(choice['query_string'], '?books_contributed__id__exact=%d' % self.django_book.pk)
+-
+-    def test_BooleanFilterSpec(self):
+-        modeladmin = BoolTestAdmin(BoolTest, admin.site)
+-
+-        request = self.request_factory.get('/')
+-        changelist = ChangeList(request, BoolTest, modeladmin.list_display, modeladmin.list_display_links,
+-            modeladmin.list_filter, modeladmin.date_hierarchy, modeladmin.search_fields,
+-            modeladmin.list_select_related, modeladmin.list_per_page, modeladmin.list_editable, modeladmin)
+-
+-        # Make sure changelist.get_query_set() does not raise IncorrectLookupParameters
+-        queryset = changelist.get_query_set()
+-
+-        # Make sure the last choice is None and is selected
+-        filterspec = changelist.get_filters(request)[0][0]
+-        self.assertEqual(force_unicode(filterspec.title()), u'completed')
+-        choices = list(filterspec.choices(changelist))
+-        self.assertEqual(choices[-1]['selected'], False)
+-        self.assertEqual(choices[-1]['query_string'], '?completed__exact=0')
+-
+-        request = self.request_factory.get('/', {'completed__exact': 1})
+-        changelist = self.get_changelist(request, BoolTest, modeladmin)
+-
+-        # Make sure the correct choice is selected
+-        filterspec = changelist.get_filters(request)[0][0]
+-        self.assertEqual(force_unicode(filterspec.title()), u'completed')
+-        # order of choices depends on User model, which has no order
+-        choice = select_by(filterspec.choices(changelist), "display", "Yes")
+-        self.assertEqual(choice['selected'], True)
+-        self.assertEqual(choice['query_string'], '?completed__exact=1')
+-
+-class CustomUserAdmin(UserAdmin):
+-    list_filter = ('books_authored', 'books_contributed')
+-
+-class BookAdmin(admin.ModelAdmin):
+-    list_filter = ('year', 'author', 'contributors')
+-    order_by = '-id'
+-
+-class BoolTestAdmin(admin.ModelAdmin):
+-    list_filter = ('completed',)
+diff --git a/tests/regressiontests/admin_views/models.py b/tests/regressiontests/admin_views/models.py
+index 97f6708..6e34ee1 100644
+--- a/tests/regressiontests/admin_views/models.py
++++ b/tests/regressiontests/admin_views/models.py
+@@ -611,7 +611,7 @@ class Gadget(models.Model):
+         return self.name
+ 
+ class CustomChangeList(ChangeList):
+-    def get_query_set(self):
++    def get_query_set(self, request):
+         return self.root_query_set.filter(pk=9999) # Does not exist
+ 
+ class GadgetAdmin(admin.ModelAdmin):
+diff --git a/tests/regressiontests/modeladmin/tests.py b/tests/regressiontests/modeladmin/tests.py
+index a20e579..530b476b 100644
+--- a/tests/regressiontests/modeladmin/tests.py
++++ b/tests/regressiontests/modeladmin/tests.py
+@@ -2,19 +2,21 @@ from datetime import date
+ 
+ from django import forms
+ from django.conf import settings
+-from django.contrib.admin.options import ModelAdmin, TabularInline, \
+-    HORIZONTAL, VERTICAL
++from django.contrib.admin.options import (ModelAdmin, TabularInline,
++    HORIZONTAL, VERTICAL)
+ from django.contrib.admin.sites import AdminSite
+ from django.contrib.admin.validation import validate
+ from django.contrib.admin.widgets import AdminDateWidget, AdminRadioSelect
++from django.contrib.admin import (SimpleListFilter,
++     BooleanFieldListFilter)
+ from django.core.exceptions import ImproperlyConfigured
+ from django.forms.models import BaseModelFormSet
+ from django.forms.widgets import Select
+ from django.test import TestCase
+ from django.utils import unittest
+ 
+-from models import Band, Concert, ValidationTestModel, \
+-    ValidationTestInlineModel
++from models import (Band, Concert, ValidationTestModel,
++    ValidationTestInlineModel)
+ 
+ 
+ # None of the following tests really depend on the content of the request,
+@@ -851,8 +853,65 @@ class ValidationTests(unittest.TestCase):
+             ValidationTestModel,
+         )
+ 
++        class RandomClass(object):
++            pass
++
++        class ValidationTestModelAdmin(ModelAdmin):
++            list_filter = (RandomClass,)
++
++        self.assertRaisesRegexp(
++            ImproperlyConfigured,
++            "'ValidationTestModelAdmin.list_filter\[0\]' is 'RandomClass' which is not a descendant of ListFilter.",
++            validate,
++            ValidationTestModelAdmin,
++            ValidationTestModel,
++        )
++
++        class ValidationTestModelAdmin(ModelAdmin):
++            list_filter = (('is_active', RandomClass),)
++
++        self.assertRaisesRegexp(
++            ImproperlyConfigured,
++            "'ValidationTestModelAdmin.list_filter\[0\]\[1\]' is 'RandomClass' which is not of type FieldListFilter.",
++            validate,
++            ValidationTestModelAdmin,
++            ValidationTestModel,
++        )
++
++        class AwesomeFilter(SimpleListFilter):
++            def get_title(self):
++                return 'awesomeness'
++            def get_choices(self, request):
++                return (('bit', 'A bit awesome'), ('very', 'Very awesome'), )
++            def get_query_set(self, cl, qs):
++                return qs
++
++        class ValidationTestModelAdmin(ModelAdmin):
++            list_filter = (('is_active', AwesomeFilter),)
++
++        self.assertRaisesRegexp(
++            ImproperlyConfigured,
++            "'ValidationTestModelAdmin.list_filter\[0\]\[1\]' is 'AwesomeFilter' which is not of type FieldListFilter.",
++            validate,
++            ValidationTestModelAdmin,
++            ValidationTestModel,
++        )
++
++        class ValidationTestModelAdmin(ModelAdmin):
++            list_filter = (BooleanFieldListFilter,)
++
++        self.assertRaisesRegexp(
++            ImproperlyConfigured,
++            "'ValidationTestModelAdmin.list_filter\[0\]' is 'BooleanFieldListFilter' which is of type FieldListFilter but is not associated with a field name.",
++            validate,
++            ValidationTestModelAdmin,
++            ValidationTestModel,
++        )
++
++        # Valid declarations below -----------
++
+         class ValidationTestModelAdmin(ModelAdmin):
+-            list_filter = ('is_active',)
++            list_filter = ('is_active', AwesomeFilter, ('is_active', BooleanFieldListFilter))
+ 
+         validate(ValidationTestModelAdmin, ValidationTestModel)
+ 
+
