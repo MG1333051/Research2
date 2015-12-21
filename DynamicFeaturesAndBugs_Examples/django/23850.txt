@@ -1,0 +1,31 @@
+commit faf0d66a80e09be3656a337c33a8e70c7fbab7e3
+Author: Collin Anderson <cmawebsite@gmail.com>
+Date:   Thu Jan 15 11:04:47 2015 -0500
+
+    Fixed #23850 -- Fixed a migrations test failure on Mac OS X & Python 3
+
+diff --git a/tests/migrations/test_commands.py b/tests/migrations/test_commands.py
+index 91b81d0..0f86289 100644
+--- a/tests/migrations/test_commands.py
++++ b/tests/migrations/test_commands.py
+@@ -2,6 +2,7 @@
+ from __future__ import unicode_literals
+ 
+ import codecs
++import importlib
+ import os
+ import shutil
+ 
+@@ -686,6 +687,11 @@ class MakeMigrationsTests(MigrationTestBase):
+         content = cmd("0001", migration_name_0001)
+         self.assertIn("dependencies=[\n]", content)
+ 
++        # Python 3.3+ importlib caches os.listdir() on some platforms like
++        # Mac OS X (#23850).
++        if hasattr(importlib, 'invalidate_caches'):                                  ########################hasattr
++            importlib.invalidate_caches()
++
+         # generate an empty migration
+         migration_name_0002 = "my_custom_migration"
+         content = cmd("0002", migration_name_0002, "--empty")
+

@@ -1,0 +1,27 @@
+commit d7a2e816a15a121c50b85c4470c91a676cbc827b
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Sat Aug 25 10:52:57 2012 +0200
+
+    Added a GeoDjango test with a raw query (Refs #17448)
+    
+    Thanks David Eklund for the initial patch.
+
+diff --git a/django/contrib/gis/tests/geoapp/tests.py b/django/contrib/gis/tests/geoapp/tests.py
+index b06d6b5..d989b50 100644
+--- a/django/contrib/gis/tests/geoapp/tests.py
++++ b/django/contrib/gis/tests/geoapp/tests.py
+@@ -186,6 +186,13 @@ class GeoModelTest(TestCase):
+         self.assertEqual(1, qs.count())
+         for pc in qs: self.assertEqual(32128, pc.point.srid)
+ 
++    def test_raw_sql_query(self):
++        "Testing raw SQL query."
++        cities1 = City.objects.all()
++        cities2 = City.objects.raw('select * from geoapp_city')
++        self.assertEqual(len(cities1), len(list(cities2)))
++        self.assertTrue(isinstance(cities2[0].point, Point))                         #######################################isinstance
++
+ 
+ class GeoLookupTest(TestCase):
+ 
+

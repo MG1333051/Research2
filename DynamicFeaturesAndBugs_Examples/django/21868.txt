@@ -1,0 +1,25 @@
+commit 935e6c1dfc10808272bfda1bbda03bfee035f3dc
+Author: Andrew Godwin <andrew@aeracode.org>
+Date:   Sun Feb 9 14:03:41 2014 +0000
+
+    Fixed #21868: Don't die when seeing py3 namespace packages for mig dirs
+
+diff --git a/django/db/migrations/questioner.py b/django/db/migrations/questioner.py
+index d2e6365..f214d243 100644
+--- a/django/db/migrations/questioner.py
++++ b/django/db/migrations/questioner.py
+@@ -39,7 +39,12 @@ class MigrationQuestioner(object):
+         except ImportError:
+             return self.defaults.get("ask_initial", False)
+         else:
+-            filenames = os.listdir(os.path.dirname(migrations_module.__file__))
++            if hasattr(migrations_module, "__file__"):        #######################hasattr
++                filenames = os.listdir(os.path.dirname(migrations_module.__file__))
++            elif hasattr(migrations_module, "__path__"):          #######################hasattr
++                if len(migrations_module.__path__) > 1:
++                    return False
++                filenames = os.listdir(list(migrations_module.__path__)[0])
+             return not any(x.endswith(".py") for x in filenames if x != "__init__.py")
+ 
+     def ask_not_null_addition(self, field_name, model_name):
+

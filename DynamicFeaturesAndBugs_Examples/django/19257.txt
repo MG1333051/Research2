@@ -1,0 +1,34 @@
+commit 9a09558e9f20e088b4526fff6374a53e877cf5ec
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Wed Nov 7 18:24:49 2012 +0100
+
+    Fixed #19257 -- Don't swallow command's KeyError in call_command
+    
+    Thanks Giovanni Bajo for the report.
+
+diff --git a/django/core/management/__init__.py b/django/core/management/__init__.py
+index c61ab2b..bb26c20 100644
+--- a/django/core/management/__init__.py
++++ b/django/core/management/__init__.py
+@@ -136,14 +136,15 @@ def call_command(name, *args, **options):
+     # Load the command object.
+     try:
+         app_name = get_commands()[name]
+-        if isinstance(app_name, BaseCommand):            #################isinstance
+-            # If the command is already loaded, use it directly.
+-            klass = app_name
+-        else:
+-            klass = load_command_class(app_name, name)
+     except KeyError:
+         raise CommandError("Unknown command: %r" % name)
+ 
++    if isinstance(app_name, BaseCommand):                #################isinstance
++        # If the command is already loaded, use it directly.
++        klass = app_name
++    else:
++        klass = load_command_class(app_name, name)
++
+     # Grab out a list of defaults from the options. optparse does this for us
+     # when the script runs from the command line, but since call_command can
+     # be called programatically, we need to simulate the loading and handling
+

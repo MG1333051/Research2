@@ -1,0 +1,27 @@
+commit d194f290571f7e9dda7d2fd7a6f2b171120f2f14
+Author: Jani Tiainen <redetin@gmail.com>
+Date:   Tue Jan 15 15:05:58 2013 +0200
+
+    Fixed #19606 -- Adjusted cx_Oracle unicode detection.
+
+diff --git a/django/db/backends/oracle/base.py b/django/db/backends/oracle/base.py
+index c6f072d..17faa17 100644
+--- a/django/db/backends/oracle/base.py
++++ b/django/db/backends/oracle/base.py
+@@ -58,10 +58,11 @@ from django.utils import timezone
+ DatabaseError = Database.DatabaseError
+ IntegrityError = Database.IntegrityError
+ 
+-
+-# Check whether cx_Oracle was compiled with the WITH_UNICODE option.  This will
+-# also be True in Python 3.0.
+-if int(Database.version.split('.', 1)[0]) >= 5 and not hasattr(Database, 'UNICODE'):    #########################hasattr       
++# Check whether cx_Oracle was compiled with the WITH_UNICODE option if cx_Oracle is pre-5.1. This will
++# also be True for cx_Oracle 5.1 and in Python 3.0. See #19606
++if int(Database.version.split('.', 1)[0]) >= 5 and \
++        (int(Database.version.split('.', 2)[1]) >= 1 or
++         not hasattr(Database, 'UNICODE')):                 #########################hasattr     
+     convert_unicode = force_text
+ else:
+     convert_unicode = force_bytes
+

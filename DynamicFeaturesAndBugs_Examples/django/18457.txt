@@ -1,0 +1,34 @@
+commit 1a10a06b9f510f796beb2ffef39c7885cba2ad67
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Sun Jun 10 19:53:35 2012 +0200
+
+    Fixed #18457 -- Fixed encoding error in yaml deserializer
+    
+    Thanks jpaugh64 for the report.
+
+diff --git a/django/core/serializers/pyyaml.py b/django/core/serializers/pyyaml.py
+index 5effda5..e490b86 100644
+--- a/django/core/serializers/pyyaml.py
++++ b/django/core/serializers/pyyaml.py
+@@ -12,6 +12,8 @@ from django.db import models
+ from django.core.serializers.base import DeserializationError
+ from django.core.serializers.python import Serializer as PythonSerializer
+ from django.core.serializers.python import Deserializer as PythonDeserializer
++from django.utils.encoding import smart_str
++
+ 
+ class DjangoSafeDumper(yaml.SafeDumper):
+     def represent_decimal(self, data):
+@@ -48,8 +50,10 @@ def Deserializer(stream_or_string, **options):
+     """
+     Deserialize a stream or string of YAML data.
+     """
+-    if isinstance(stream_or_string, basestring):           ######################isinstance
++    if isinstance(stream_or_string, bytes):                ######################isinstance
+         stream = BytesIO(stream_or_string)
++    if isinstance(stream_or_string, unicode                ######################isinstance
++        stream = BytesIO(smart_str(stream_or_string))
+     else:
+         stream = stream_or_string
+     try:
+

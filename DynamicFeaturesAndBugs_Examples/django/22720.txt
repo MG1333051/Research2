@@ -1,0 +1,21 @@
+commit 6cfa2fae3963c11e4c8ad180decba2928736dba0
+Author: Víðir Valberg Guðmundsson <valberg@orn.li>
+Date:   Thu May 29 01:00:30 2014 +0200
+
+    Fixed #22720 -- Migrations attempt to create _order twice.
+
+diff --git a/django/db/models/options.py b/django/db/models/options.py
+index a5f4280..4f04746 100644
+--- a/django/db/models/options.py
++++ b/django/db/models/options.py
+@@ -167,7 +167,8 @@ class Options(object):
+         if self.order_with_respect_to:
+             self.order_with_respect_to = self.get_field(self.order_with_respect_to)
+             self.ordering = ('_order',)
+-            model.add_to_class('_order', OrderWrt())
++            if not any(isinstance(field, OrderWrt) for field in model._meta.local_fields):      ########################isinstance       
++                model.add_to_class('_order', OrderWrt())
+         else:
+             self.order_with_respect_to = None
+ 
+

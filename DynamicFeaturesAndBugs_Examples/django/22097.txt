@@ -1,0 +1,34 @@
+commit cb844497d01ddb45603e47891cdf36ae0b006d03
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Thu Feb 20 13:40:42 2014 +0100
+
+    Fixed #22097 -- Fixed change detection for TypedChoiceField
+    
+    Thanks Igor Mitrenko for the report.
+
+diff --git a/django/forms/fields.py b/django/forms/fields.py
+index 629aa69..8b5fd2c 100644
+--- a/django/forms/fields.py
++++ b/django/forms/fields.py
+@@ -191,6 +191,8 @@ class Field(object):
+         initial_value = initial if initial is not None else ''
+         try:
+             data = self.to_python(data)
++            if hasattr(self, '_coerce'):                    ######################hasattr
++                data = self._coerce(data)
+         except ValidationError:
+             return True
+         data_value = data if data is not None else ''
+diff --git a/tests/forms_tests/tests/test_fields.py b/tests/forms_tests/tests/test_fields.py
+index 78b74ae..8cea26c 100644
+--- a/tests/forms_tests/tests/test_fields.py
++++ b/tests/forms_tests/tests/test_fields.py
+@@ -961,6 +961,7 @@ class FieldsTests(SimpleTestCase):
+         # has_changed should not trigger required validation
+         f = TypedChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=int, required=True)
+         self.assertFalse(f._has_changed(None, ''))
++        self.assertFalse(f._has_changed(1, '1'))
+ 
+     def test_typedchoicefield_special_coerce(self):
+         """
+

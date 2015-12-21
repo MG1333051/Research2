@@ -1,0 +1,30 @@
+commit 1f5268a01f82c314b48d195b7d7a344f9db58b6d
+Author: Andrew Godwin <andrew@aeracode.org>
+Date:   Sun Jan 19 18:09:52 2014 +0000
+
+    Fixed #21786: Bad behaviour when mixins + abstract bases for migrations
+
+diff --git a/django/db/migrations/state.py b/django/db/migrations/state.py
+index 3bc7837..ab4c4be 100644
+--- a/django/db/migrations/state.py
++++ b/django/db/migrations/state.py
+@@ -147,11 +147,16 @@ class ModelState(object):
+                     options[name] = model._meta.original_attrs[name]
+         # Make our record
+         bases = tuple(
+-            ("%s.%s" % (base._meta.app_label, base._meta.model_name) if hasattr(base, "_meta") else base)   ######################hasattr  
++            (
++                "%s.%s" % (base._meta.app_label, base._meta.model_name)
++                if hasattr(base, "_meta") else               ######################hasattr
++                base
++            )
+             for base in model.__bases__
+             if (not hasattr(base, "_meta") or not base._meta.abstract)
+         )
+-        if not bases:
++        # Ensure at least one base inherits from models.Model
++        if not any((isinstance(base, six.string_types) or issubclass(base, models.Model)) for base in bases):   ######################isinstance
+             bases = (models.Model, )
+         return cls(
+             model._meta.app_label,
+
