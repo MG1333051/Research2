@@ -1,0 +1,44 @@
+commit f08e739bc2ba5d3530a806378087227728369464
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Fri Jan 11 21:09:33 2013 +0100
+
+    Fixed #19585 -- Fixed loading cookie value as a dict
+    
+    This regression was introduced by the 'unicode_literals' patch.
+
+diff --git a/django/http/cookie.py b/django/http/cookie.py
+index 78adb09..50ff549 100644
+--- a/django/http/cookie.py
++++ b/django/http/cookie.py
+@@ -1,6 +1,7 @@
+ from __future__ import absolute_import, unicode_literals
+ 
+ from django.utils.encoding import force_str
++from django.utils import six
+ from django.utils.six.moves import http_cookies
+ 
+ 
+@@ -48,7 +49,9 @@ else:
+         if not _cookie_allows_colon_in_names:
+             def load(self, rawdata):
+                 self.bad_cookies = set()
+-                super(SimpleCookie, self).load(force_str(rawdata))
++                if not six.PY3 and isinstance(rawdata, six.text_type):   ############################isinstance
++                    rawdata = force_str(rawdata)
++                super(SimpleCookie, self).load(rawdata)
+                 for key in self.bad_cookies:
+                     del self[key]
+ 
+diff --git a/tests/regressiontests/httpwrappers/tests.py b/tests/regressiontests/httpwrappers/tests.py
+index 67172d9..c76d8ea 100644
+--- a/tests/regressiontests/httpwrappers/tests.py
++++ b/tests/regressiontests/httpwrappers/tests.py
+@@ -588,3 +588,7 @@ class CookieTests(unittest.TestCase):
+         c['name']['httponly'] = True
+         self.assertTrue(c['name']['httponly'])
+ 
++    def test_load_dict(self):
++        c = SimpleCookie()
++        c.load({'name': 'val'})
++        self.assertEqual(c['name'].value, 'val')
+

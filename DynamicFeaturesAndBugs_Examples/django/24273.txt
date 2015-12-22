@@ -1,0 +1,43 @@
+commit 31d3a35579d3dd05d0de7eb384e7ed22b589ed96
+Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+Date:   Thu Feb 5 13:20:33 2015 +0100
+
+    Fixed #24273 -- Allowed copying RequestContext more than once.
+    
+    Thanks Collin Anderson for the report.
+
+diff --git a/django/template/context.py b/django/template/context.py
+index d72c70c..9543931 100644
+--- a/django/template/context.py
++++ b/django/template/context.py
+@@ -232,5 +232,6 @@ class RequestContext(Context):
+         new_context = super(RequestContext, self).new(values)
+         # This is for backwards-compatibility: RequestContexts created via
+         # Context.new don't include values from context processors.
+-        del new_context._processors_index                      #######################del
++        if hasattr(new_context, '_processors_index'):           #######################hasattr
++            del new_context._processors_index                   #######################del
+         return new_context
+diff --git a/tests/template_tests/test_context.py b/tests/template_tests/test_context.py
+index c5ad3e1..24d589f 100644
+--- a/tests/template_tests/test_context.py
++++ b/tests/template_tests/test_context.py
+@@ -2,7 +2,8 @@
+ 
+ from unittest import TestCase
+ 
+-from django.template import Context, Variable, VariableDoesNotExist
++from django.http import HttpRequest
++from django.template import Context, RequestContext, Variable, VariableDoesNotExist
+ from django.template.context import RenderContext
+ 
+ 
+@@ -83,3 +84,7 @@ class ContextTests(TestCase):
+         # make contexts equals again
+         b.update({'a': 1})
+         self.assertEqual(a, b)
++
++    def test_copy_request_context_twice(self):
++        # Regression test for #24273 - this doesn't raise an exception
++        RequestContext(HttpRequest()).new().new()
+

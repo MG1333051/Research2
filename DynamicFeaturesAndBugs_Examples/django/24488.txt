@@ -1,0 +1,43 @@
+commit 818182b514d1c6b379130c440689355b4d231d49
+Author: Marten Kenbeek <marten.knbk@gmail.com>
+Date:   Sun Mar 15 23:54:20 2015 +0100
+
+    Fixed #24488 -- Made create_default_site() use default pk of 1.
+    
+    Fixed create_default_site() to use a default value in case
+    settings.SITE_ID isn't set; refs #23945.
+
+diff --git a/django/contrib/sites/management.py b/django/contrib/sites/management.py
+index 5647b6a..1f40307 100644
+--- a/django/contrib/sites/management.py
++++ b/django/contrib/sites/management.py
+@@ -25,7 +25,7 @@ def create_default_site(app_config, verbosity=2, interactive=True, using=DEFAULT
+         # can also crop up outside of tests - see #15346.
+         if verbosity >= 2:
+             print("Creating example.com Site object")
+-        Site(pk=settings.SITE_ID, domain="example.com", name="example.com").save(using=using)
++        Site(pk=getattr(settings, 'SITE_ID', 1), domain="example.com", name="example.com").save(using=using)   ###############getattr
+ 
+         # We set an explicit pk instead of relying on auto-incrementation,
+         # so we need to reset the database sequence. See #17415.
+diff --git a/tests/sites_tests/tests.py b/tests/sites_tests/tests.py
+index 9b409fd..128420a 100644
+--- a/tests/sites_tests/tests.py
++++ b/tests/sites_tests/tests.py
+@@ -209,6 +209,15 @@ class CreateDefaultSiteTests(TestCase):
+         create_default_site(self.app_config, verbosity=0)
+         self.assertEqual(Site.objects.get().pk, 35696)
+ 
++    @override_settings()  # Restore original ``SITE_ID`` afterwards.
++    def test_no_site_id(self):
++        """
++        #24488 - The pk should default to 1 if no ``SITE_ID`` is configured.
++        """
++        del settings.SITE_ID              #####################del
++        create_default_site(self.app_config, verbosity=0)
++        self.assertEqual(Site.objects.get().pk, 1)
++
+ 
+ class MiddlewareTest(TestCase):
+ 
+

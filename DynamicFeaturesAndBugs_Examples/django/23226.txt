@@ -1,0 +1,44 @@
+commit 5257b85ab8a4a86b24005e3ca8c542ede44b0687
+Author: Andrew Godwin <andrew@aeracode.org>
+Date:   Thu Aug 7 12:13:37 2014 +1000
+
+    Fixed #23226: Model options appearing as bytes type in migrations
+
+diff --git a/django/db/migrations/state.py b/django/db/migrations/state.py
+index d24a37e..4f65a12 100644
+--- a/django/db/migrations/state.py
++++ b/django/db/migrations/state.py
+@@ -207,6 +207,8 @@ class ModelState(object):
+                     options[name] = set(normalize_together(it))
+                 else:
+                     options[name] = model._meta.original_attrs[name]
++        # Force-convert all options to text_type (#23226)
++        options = cls.force_text_recursive(options)
+         # If we're ignoring relationships, remove all field-listing model
+         # options (that option basically just means "make a stub model")
+         if exclude_rels:
+@@ -250,6 +252,23 @@ class ModelState(object):
+             bases,
+         )
+ 
++    @classmethod
++    def force_text_recursive(cls, value):
++        if isinstance(value, six.string_types):                 ####################isinstance
++            return six.text_type(value)
++        elif isinstance(value, list):               ####################isinstance
++            return [cls.force_text_recursive(x) for x in value]
++        elif isinstance(value, tuple):            ####################isinstance
++            return tuple(cls.force_text_recursive(x) for x in value)
++        elif isinstance(value, set):            ####################isinstance
++            return set(cls.force_text_recursive(x) for x in value)
++        elif isinstance(value, dict):               ####################isinstance
++            return dict(
++                (cls.force_text_recursive(k), cls.force_text_recursive(v))
++                for k, v in value.items()
++            )
++        return value
++
+     def construct_fields(self):
+         "Deep-clone the fields using deconstruction"
+         for name, field in self.fields:
+

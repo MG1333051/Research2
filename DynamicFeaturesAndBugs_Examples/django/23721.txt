@@ -1,0 +1,43 @@
+commit ae7cb992bca5d211c9456487feb21b84387006eb
+Author: Collin Anderson <cmawebsite@gmail.com>
+Date:   Mon Oct 27 21:36:47 2014 -0400
+
+    Fixed #23721 -- check_related_objects without calling __iter__
+    
+    Refs #14334
+
+diff --git a/django/db/models/sql/query.py b/django/db/models/sql/query.py
+index b6690e4..4560989 100644
+--- a/django/db/models/sql/query.py
++++ b/django/db/models/sql/query.py
+@@ -1102,12 +1102,11 @@ class Query(object):
+                         'Cannot use QuerySet for "%s": Use a QuerySet for "%s".' %
+                         (value.model._meta.model_name, opts.object_name)
+                     )
++            elif hasattr(value, '_meta'):           ###################hasattr
++                self.check_query_object_type(value, opts)
+             elif hasattr(value, '__iter__'):
+                 for v in value:
+                     self.check_query_object_type(v, opts)
+-            else:
+-                # expecting single model instance here
+-                self.check_query_object_type(value, opts)
+ 
+     def build_lookup(self, lookups, lhs, rhs):
+         lookups = lookups[:]
+diff --git a/tests/queries/models.py b/tests/queries/models.py
+index bb3d52a..fbd6221 100644
+--- a/tests/queries/models.py
++++ b/tests/queries/models.py
+@@ -408,6 +408,10 @@ class ObjectA(models.Model):
+     def __str__(self):
+         return self.name
+ 
++    def __iter__(self):
++        # Ticket #23721
++        assert False, 'type checking should happen without calling model __iter__'
++
+ 
+ class ProxyObjectA(ObjectA):
+     class Meta:
+

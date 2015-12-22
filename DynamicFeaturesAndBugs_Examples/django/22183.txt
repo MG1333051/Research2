@@ -1,0 +1,34 @@
+commit 1562b9896f8f614ef40fd032b1ec777280b377c1
+Author: Andrew Godwin <andrew@aeracode.org>
+Date:   Thu Mar 6 11:35:58 2014 -0800
+
+    Fixed #22183: Don't make a table for M2Ms with through=
+
+diff --git a/django/db/backends/schema.py b/django/db/backends/schema.py
+index afc60c3..7054633 100644
+--- a/django/db/backends/schema.py
++++ b/django/db/backends/schema.py
+@@ -262,7 +262,8 @@ class BaseDatabaseSchemaEditor(object):
+             })
+         # Make M2M tables
+         for field in model._meta.local_many_to_many:
+-            self.create_model(field.rel.through)
++            if field.rel.through._meta.auto_created:
++                self.create_model(field.rel.through)
+ 
+     def delete_model(self, model):
+         """
+diff --git a/django/db/models/fields/related.py b/django/db/models/fields/related.py
+index e7b6621..16de0bf 100644
+--- a/django/db/models/fields/related.py
++++ b/django/db/models/fields/related.py
+@@ -2032,6 +2032,8 @@ class ManyToManyField(RelatedField):
+             kwargs['to'] = self.rel.to
+         else:
+             kwargs['to'] = "%s.%s" % (self.rel.to._meta.app_label, self.rel.to._meta.object_name)
++        if getattr(self.rel, 'through', None) is not None:       ########################getattr
++            kwargs['through'] = self.rel.through
+         # If swappable is True, then see if we're actually pointing to the target
+         # of a swap.
+         swappable_setting = self.swappable_setting
+

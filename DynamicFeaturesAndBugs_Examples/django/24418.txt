@@ -1,0 +1,41 @@
+commit 5cf96b49e43daea6d4a0ba1c80c45e90c74f4e47
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Fri Feb 27 18:19:56 2015 +0100
+
+    Fixed #24418 -- Prevented crash in refresh_from_db with null fk
+    
+    Thanks Johannes Lerch for the report, Tim Graham for the test case,
+    and Simon Charette for the review.
+
+diff --git a/django/db/models/base.py b/django/db/models/base.py
+index a505efa..cb1d37f 100644
+--- a/django/db/models/base.py
++++ b/django/db/models/base.py
+@@ -596,7 +596,7 @@ class Model(six.with_metaclass(ModelBase)):
+             if field.rel and field.get_cache_name() in self.__dict__:
+                 rel_instance = getattr(self, field.get_cache_name())
+                 local_val = getattr(db_instance, field.attname)
+-                related_val = getattr(rel_instance, field.related_field.attname)     ##########################getattr
++                related_val = None if rel_instance is None else getattr(rel_instance, field.related_field.attname)     ##########################getattr
+                 if local_val != related_val:
+                     del self.__dict__[field.get_cache_name()]
+         self._state.db = db_instance._state.db
+diff --git a/tests/basic/tests.py b/tests/basic/tests.py
+index d851d85..934c558 100644
+--- a/tests/basic/tests.py
++++ b/tests/basic/tests.py
+@@ -735,6 +735,13 @@ class ModelRefreshTests(TestCase):
+             self.assertFalse(hasattr(s3_copy.selfref, 'touched'))
+             self.assertEqual(s3_copy.selfref, s2)
+ 
++    def test_refresh_null_fk(self):
++        s1 = SelfRef.objects.create()
++        s2 = SelfRef.objects.create(selfref=s1)
++        s2.selfref = None
++        s2.refresh_from_db()
++        self.assertEqual(s2.selfref, s1)
++
+     def test_refresh_unsaved(self):
+         pub_date = self._truncate_ms(datetime.now())
+         a = Article.objects.create(pub_date=pub_date)
+

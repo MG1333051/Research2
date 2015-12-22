@@ -1,0 +1,37 @@
+commit a539d434d9451eb201d8b79b45740e192c1736ca
+Author: Jannis Leidel <jannis@leidel.info>
+Date:   Fri Aug 12 14:15:56 2011 +0000
+
+    Fixed #16573 -- Corrected a regression in the admindocs app's view overview introduced in r16405. Thanks, lopopolo.
+    
+    git-svn-id: http://code.djangoproject.com/svn/django/trunk@16609 bcc190cf-cafb-0310-a4f2-bffc1f526a37
+
+diff --git a/django/contrib/admindocs/views.py b/django/contrib/admindocs/views.py
+index 1f57900..28319be 100644
+--- a/django/contrib/admindocs/views.py
++++ b/django/contrib/admindocs/views.py
+@@ -349,17 +349,17 @@ def extract_views_from_urlpatterns(urlpatterns, base=''):
+     """
+     views = []
+     for p in urlpatterns:
+-        if hasattr(p, 'callback'):                       ##############################hasattr####
+-            try:
+-                views.append((p.callback, base + p.regex.pattern))
+-            except ViewDoesNotExist:
+-                continue
+-        elif hasattr(p, 'url_patterns'):                  ############################hasattr
++        if hasattr(p, 'url_patterns'):                    ############################hasattr
+             try:
+                 patterns = p.url_patterns
+             except ImportError:
+                 continue
+             views.extend(extract_views_from_urlpatterns(patterns, base + p.regex.pattern))
++        elif hasattr(p, 'callback'):                         ############################hasattr
++            try:
++                views.append((p.callback, base + p.regex.pattern))
++            except ViewDoesNotExist:
++                continue
+         else:
+             raise TypeError(_("%s does not appear to be a urlpattern object") % p)
+     return views
+

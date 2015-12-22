@@ -1,0 +1,44 @@
+commit 1aadade373336c3f534986cdcc0ba33714d85c8e
+Author: Baptiste Mispelon <bmispelon@gmail.com>
+Date:   Mon Mar 23 15:38:25 2015 +0100
+
+    Fixed #24521 -- Added support for serializing frozensets in migrations.
+
+diff --git a/django/db/migrations/writer.py b/django/db/migrations/writer.py
+index 9067e7b..f4f43ac 100644
+--- a/django/db/migrations/writer.py
++++ b/django/db/migrations/writer.py
+@@ -302,7 +302,7 @@ class MigrationWriter(object):
+             value = force_text(value)
+ 
+         # Sequences
+-        if isinstance(value, (list, set, tuple)):               ####################isinstance
++        if isinstance(value, (frozenset, list, set, tuple)):      ####################isinstance
+             imports = set()
+             strings = []
+             for item in value:
+@@ -312,6 +312,8 @@ class MigrationWriter(object):
+             if isinstance(value, set):
+                 # Don't use the literal "{%s}" as it doesn't support empty set
+                 format = "set([%s])"
++            elif isinstance(value, frozenset):                  ####################isinstance
++                format = "frozenset([%s])"
+             elif isinstance(value, tuple):
+                 # When len(value)==0, the empty tuple should be serialized as
+                 # "()", not "(,)" because (,) is invalid Python syntax.
+diff --git a/tests/migrations/test_writer.py b/tests/migrations/test_writer.py
+index 28c68d8..aa12c7c 100644
+--- a/tests/migrations/test_writer.py
++++ b/tests/migrations/test_writer.py
+@@ -347,6 +347,10 @@ class WriterTests(TestCase):
+         self.assertSerializedEqual(FoodManager('a', 'b'))
+         self.assertSerializedEqual(FoodManager('x', 'y', c=3, d=4))
+ 
++    def test_serialize_frozensets(self):
++        self.assertSerializedEqual(frozenset())
++        self.assertSerializedEqual(frozenset("let it go"))
++
+     def test_simple_migration(self):
+         """
+         Tests serializing a simple migration.
+

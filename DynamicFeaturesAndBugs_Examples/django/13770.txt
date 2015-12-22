@@ -1,0 +1,35 @@
+commit 8ce352c21d9ce4c59fcd259103350772954a6f8e
+Author: Jannis Leidel <jannis@leidel.info>
+Date:   Tue May 3 11:52:30 2011 +0000
+
+    Fixed #13770 -- Extended BooleanField form field to also clean `u'false'` to `False`. Thanks, jordanb and Claude Paroz.
+    
+    git-svn-id: http://code.djangoproject.com/svn/django/trunk@16148 bcc190cf-cafb-0310-a4f2-bffc1f526a37
+
+diff --git a/django/forms/fields.py b/django/forms/fields.py
+index e3299c0..a5ea81d 100644
+--- a/django/forms/fields.py
++++ b/django/forms/fields.py
+@@ -605,7 +605,7 @@ class BooleanField(Field):
+         # will submit for False. Also check for '0', since this is what
+         # RadioSelect will provide. Because bool("True") == bool('1') == True,
+         # we don't need to handle that explicitly.
+-        if value in ('False', '0'):
++        if isinstance(value, basestring) and value.lower() in ('false', '0'):           ###################isinstance
+             value = False
+         else:
+             value = bool(value)
+diff --git a/tests/regressiontests/forms/tests/fields.py b/tests/regressiontests/forms/tests/fields.py
+index 59c761c..2303b4e 100644
+--- a/tests/regressiontests/forms/tests/fields.py
++++ b/tests/regressiontests/forms/tests/fields.py
+@@ -698,6 +698,8 @@ class FieldsTests(TestCase):
+         self.assertEqual(False, f.clean('0'))
+         self.assertEqual(True, f.clean('Django rocks'))
+         self.assertEqual(False, f.clean('False'))
++        self.assertEqual(False, f.clean('false'))
++        self.assertEqual(False, f.clean('FaLsE'))
+ 
+     # ChoiceField #################################################################
+ 
+

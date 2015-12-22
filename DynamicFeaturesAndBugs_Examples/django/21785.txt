@@ -1,0 +1,40 @@
+commit 86e69bf3b67ff1e156413e07cef018ec52c2cdd4
+Author: Andrew Godwin <andrew@aeracode.org>
+Date:   Fri Jan 17 10:45:31 2014 +0000
+
+    Fixed #21785: Bad handling of both auto_now and _add on deconstruct
+
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index bc5c48d..7172cf1 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -904,10 +904,9 @@ class DateField(Field):
+         name, path, args, kwargs = super(DateField, self).deconstruct()
+         if self.auto_now:
+             kwargs['auto_now'] = True
+-            del kwargs['editable']               #####################del
+-            del kwargs['blank']                  #####################del
+         if self.auto_now_add:
+             kwargs['auto_now_add'] = True
++        if self.auto_now or self.auto_now_add:
+             del kwargs['editable']
+             del kwargs['blank']
+         return name, path, args, kwargs
+diff --git a/tests/field_deconstruction/tests.py b/tests/field_deconstruction/tests.py
+index 49bc57f..cb78003 100644
+--- a/tests/field_deconstruction/tests.py
++++ b/tests/field_deconstruction/tests.py
+@@ -96,6 +96,12 @@ class FieldDeconstructionTests(TestCase):
+         self.assertEqual(path, "django.db.models.DateTimeField")
+         self.assertEqual(args, [])
+         self.assertEqual(kwargs, {"auto_now_add": True})
++        # Bug #21785
++        field = models.DateTimeField(auto_now=True, auto_now_add=True)
++        name, path, args, kwargs = field.deconstruct()
++        self.assertEqual(path, "django.db.models.DateTimeField")
++        self.assertEqual(args, [])
++        self.assertEqual(kwargs, {"auto_now_add": True, "auto_now": True})
+ 
+     def test_decimal_field(self):
+         field = models.DecimalField(max_digits=5, decimal_places=2)
+

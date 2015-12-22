@@ -1,0 +1,36 @@
+commit acbb911ad5ab6160bbbf5ee510d3097124d5cca2
+Author: Karen Tracey <kmtracey@gmail.com>
+Date:   Sat Jun 4 15:29:11 2011 +0000
+
+    Fix #15880: Prevent "stalling" when running dev server in background by ignoring SIGTTOU for the duration of tcsetattr.
+    
+    git-svn-id: http://code.djangoproject.com/svn/django/trunk@16326 bcc190cf-cafb-0310-a4f2-bffc1f526a37
+
+diff --git a/django/utils/autoreload.py b/django/utils/autoreload.py
+index ffa75e2..ec7b103 100644
+--- a/django/utils/autoreload.py
++++ b/django/utils/autoreload.py
+@@ -28,7 +28,7 @@
+ # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+-import os, sys, time
++import os, sys, time, signal
+ 
+ try:
+     import thread
+@@ -78,7 +78,13 @@ def ensure_echo_on():
+             attr_list = termios.tcgetattr(fd)
+             if not attr_list[3] & termios.ECHO:
+                 attr_list[3] |= termios.ECHO
++                if hasattr(signal, 'SIGTTOU'):            ######################hasattr
++                    old_handler = signal.signal(signal.SIGTTOU, signal.SIG_IGN)
++                else:
++                    old_handler = None
+                 termios.tcsetattr(fd, termios.TCSANOW, attr_list)
++                if old_handler is not None:
++                    signal.signal(signal.SIGTTOU, old_handler)
+ 
+ def reloader_thread():
+     ensure_echo_on()
+

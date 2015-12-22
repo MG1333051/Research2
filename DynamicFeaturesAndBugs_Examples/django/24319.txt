@@ -1,0 +1,46 @@
+commit de0241eb985c6dec978beda119fee353ef3e9604
+Author: Josh Smeaton <josh.smeaton@gmail.com>
+Date:   Thu Feb 12 13:25:12 2015 +1100
+
+    Fixed #24319 -- Added validation for UUID model field
+
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index cf5b6d7..8cb8319 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -2382,12 +2382,12 @@ class UUIDField(Field):
+         return "UUIDField"
+ 
+     def get_db_prep_value(self, value, connection, prepared=False):
++        if isinstance(value, six.string_types):               #######################isinstance
++            value = uuid.UUID(value.replace('-', ''))
+         if isinstance(value, uuid.UUID):
+             if connection.features.has_native_uuid_field:
+                 return value
+             return value.hex
+-        if isinstance(value, six.string_types):                   #######################isinstance
+-            return value.replace('-', '')
+         return value
+ 
+     def to_python(self, value):
+diff --git a/tests/model_fields/test_uuid.py b/tests/model_fields/test_uuid.py
+index 4680d5d..f06f4d0 100644
+--- a/tests/model_fields/test_uuid.py
++++ b/tests/model_fields/test_uuid.py
+@@ -34,6 +34,15 @@ class TestSaveLoad(TestCase):
+         loaded = NullableUUIDModel.objects.get()
+         self.assertEqual(loaded.field, None)
+ 
++    def test_wrong_value(self):
++        self.assertRaisesMessage(
++            ValueError, 'badly formed hexadecimal UUID string',
++            UUIDModel.objects.get, field='not-a-uuid')
++
++        self.assertRaisesMessage(
++            ValueError, 'badly formed hexadecimal UUID string',
++            UUIDModel.objects.create, field='not-a-uuid')
++
+ 
+ class TestMigrations(TestCase):
+ 
+

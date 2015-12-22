@@ -1,0 +1,39 @@
+commit f2a44528825ac07ca28c8bb7dc01b4375df8dc2c
+Author: e0ne <e0ne@e0ne.info>
+Date:   Mon Sep 9 12:40:37 2013 +0300
+
+    Fixed #18403 -- Initialized bad_cookies in SimpleCookie
+    
+    Thanks Stefano Crosta for the report.
+
+diff --git a/django/http/cookie.py b/django/http/cookie.py
+index 40cf58d..eef0c35 100644
+--- a/django/http/cookie.py
++++ b/django/http/cookie.py
+@@ -64,6 +64,8 @@ else:
+                     M.set(key, real_value, coded_value)
+                     dict.__setitem__(self, key, M)
+                 except http_cookies.CookieError:
++                    if not hasattr(self, 'bad_cookies'):      ###############hasattr
++                        self.bad_cookies = set()
+                     self.bad_cookies.add(key)
+                     dict.__setitem__(self, key, http_cookies.Morsel())
+ 
+diff --git a/tests/httpwrappers/tests.py b/tests/httpwrappers/tests.py
+index 17bb98e..287d800 100644
+--- a/tests/httpwrappers/tests.py
++++ b/tests/httpwrappers/tests.py
+@@ -618,3 +618,12 @@ class CookieTests(unittest.TestCase):
+         c = SimpleCookie()
+         c.load({'name': 'val'})
+         self.assertEqual(c['name'].value, 'val')
++
++    @unittest.skipUnless(six.PY2, "PY3 throws an exception on invalid cookie keys.")
++    def test_bad_cookie(self):
++        """
++        Regression test for #18403
++        """
++        r = HttpResponse()
++        r.set_cookie("a:.b/", 1)
++        self.assertEqual(len(r.cookies.bad_cookies), 1)
+

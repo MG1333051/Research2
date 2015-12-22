@@ -1,0 +1,48 @@
+commit fe873e276527534b3c0c22f457ee314cf029ced4
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Thu Jun 14 11:32:40 2012 +0200
+
+    Fixed #12140 -- Fixed http.urlencode result for empty lists
+    
+    Thanks aneil for the report and the initial patch.
+
+diff --git a/django/utils/http.py b/django/utils/http.py
+index dbd18d8..87db284 100644
+--- a/django/utils/http.py
++++ b/django/utils/http.py
+@@ -71,7 +71,7 @@ def urlencode(query, doseq=0):
+         query = query.items()
+     return urllib.urlencode(
+         [(smart_str(k),
+-         isinstance(v, (list,tuple)) and [smart_str(i) for i in v] or smart_str(v))           ##########isinstance
++         [smart_str(i) for i in v] if isinstance(v, (list,tuple)) else smart_str(v))      ##########isinstance
+             for k, v in query],
+         doseq)
+ 
+diff --git a/tests/regressiontests/utils/http.py b/tests/regressiontests/utils/http.py
+index 16c7daa..67dcd7a 100644
+--- a/tests/regressiontests/utils/http.py
++++ b/tests/regressiontests/utils/http.py
+@@ -31,6 +31,7 @@ class TestUtilsHttp(unittest.TestCase):
+         # 2-tuples (the norm)
+         result = http.urlencode((('a', 1), ('b', 2), ('c', 3)))
+         self.assertEqual(result, 'a=1&b=2&c=3')
++
+         # A dictionary
+         result = http.urlencode({ 'a': 1, 'b': 2, 'c': 3})
+         acceptable_results = [
+@@ -44,6 +45,13 @@ class TestUtilsHttp(unittest.TestCase):
+             'c=3&b=2&a=1'
+         ]
+         self.assertTrue(result in acceptable_results)
++        result = http.urlencode({'a': [1, 2]}, doseq=False)
++        self.assertEqual(result, 'a=%5B%271%27%2C+%272%27%5D')
++        result = http.urlencode({'a': [1, 2]}, doseq=True)
++        self.assertEqual(result, 'a=1&a=2')
++        result = http.urlencode({'a': []}, doseq=True)
++        self.assertEqual(result, '')
++
+         # A MultiValueDict
+         result = http.urlencode(MultiValueDict({
+             'name': ['Adrian', 'Simon'],
+

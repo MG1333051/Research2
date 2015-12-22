@@ -1,0 +1,38 @@
+commit 72f1eb48df335c110f39d56f7978d95896a56bb8
+Author: Baptiste Mispelon <bmispelon@gmail.com>
+Date:   Sun Aug 3 12:59:21 2014 +0200
+
+    Fixed #23156 -- Added missing BinaryField.deconstruct() method.
+
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 3d8a5b7..a0f72a7 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -2178,6 +2178,11 @@ class BinaryField(Field):
+         if self.max_length is not None:
+             self.validators.append(validators.MaxLengthValidator(self.max_length))
+ 
++    def deconstruct(self):
++        name, path, args, kwargs = super(BinaryField, self).deconstruct()
++        del kwargs['editable']                                        ####################del
++        return name, path, args, kwargs
++
+     def get_internal_type(self):
+         return "BinaryField"
+ 
+diff --git a/tests/field_deconstruction/tests.py b/tests/field_deconstruction/tests.py
+index 5a424ee..be73f8b 100644
+--- a/tests/field_deconstruction/tests.py
++++ b/tests/field_deconstruction/tests.py
+@@ -347,3 +347,10 @@ class FieldDeconstructionTests(TestCase):
+         self.assertEqual(path, "django.db.models.URLField")
+         self.assertEqual(args, [])
+         self.assertEqual(kwargs, {"max_length": 231})
++
++    def test_binary_field(self):
++        field = models.BinaryField()
++        name, path, args, kwargs = field.deconstruct()
++        self.assertEqual(path, "django.db.models.BinaryField")
++        self.assertEqual(args, [])
++        self.assertEqual(kwargs, {})
+

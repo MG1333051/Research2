@@ -1,0 +1,39 @@
+commit 3a6cb9f497af4e5eb8351706056eae50a4ed3c45
+Author: Víðir Valberg Guðmundsson <valberg@orn.li>
+Date:   Tue Jun 17 17:50:31 2014 +0200
+
+    Fixed #22577: Python 3 broke on non-module migrations directory
+
+diff --git a/django/db/migrations/writer.py b/django/db/migrations/writer.py
+index dee8679..71f81e9 100644
+--- a/django/db/migrations/writer.py
++++ b/django/db/migrations/writer.py
+@@ -158,6 +158,12 @@ class MigrationWriter(object):
+         # See if we can import the migrations module directly
+         try:
+             migrations_module = import_module(migrations_package_name)
++
++            # Python 3 fails when the migrations directory does not have a
++            # __init__.py file
++            if not hasattr(migrations_module, '__file__'):            ##########################hasattr
++                raise ImportError
++
+             basedir = os.path.dirname(migrations_module.__file__)
+         except ImportError:
+             app_config = apps.get_app_config(self.migration.app_label)
+diff --git a/tests/migrations/migrations_test_apps/without_init_file/migrations/.keep b/tests/migrations/migrations_test_apps/without_init_file/migrations/.keep
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/migrations/test_writer.py b/tests/migrations/test_writer.py
+index cd59938..8f8437f 100644
+--- a/tests/migrations/test_writer.py
++++ b/tests/migrations/test_writer.py
+@@ -215,6 +215,7 @@ class WriterTests(TestCase):
+         test_apps = [
+             'migrations.migrations_test_apps.normal',
+             'migrations.migrations_test_apps.with_package_model',
++            'migrations.migrations_test_apps.without_init_file',
+         ]
+ 
+         base_dir = os.path.dirname(os.path.dirname(__file__))
+

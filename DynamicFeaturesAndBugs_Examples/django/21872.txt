@@ -1,0 +1,26 @@
+commit 6758a9c0fc34dc9944895b98045d2b26c8147ea2
+Author: Andrew Godwin <andrew@aeracode.org>
+Date:   Mon Jan 27 11:49:55 2014 +0000
+
+    Fixed #21872: Not detecting dependencies from M2M fields
+
+diff --git a/django/db/migrations/autodetector.py b/django/db/migrations/autodetector.py
+index df49088..6037c37 100644
+--- a/django/db/migrations/autodetector.py
++++ b/django/db/migrations/autodetector.py
+@@ -72,8 +72,13 @@ class MigrationAutodetector(object):
+                 if field.rel:
+                     if field.rel.to:
+                         related_fields.append((field.name, field.rel.to._meta.app_label, field.rel.to._meta.model_name))
+-                    if hasattr(field.rel, "through") and not field.rel.though._meta.auto_created:                   ########################hasattr
++                    if hasattr(field.rel, "through") and not field.rel.through._meta.auto_created:                 ########################hasattr
+                         related_fields.append((field.name, field.rel.through._meta.app_label, field.rel.through._meta.model_name))
++            for field in new_apps.get_model(app_label, model_name)._meta.local_many_to_many:
++                if field.rel.to:
++                    related_fields.append((field.name, field.rel.to._meta.app_label, field.rel.to._meta.model_name))
++                if hasattr(field.rel, "through") and not field.rel.through._meta.auto_created:                    ########################hasattr
++                    related_fields.append((field.name, field.rel.through._meta.app_label, field.rel.through._meta.model_name))
+             if related_fields:
+                 pending_add[app_label, model_name] = related_fields
+             else:
+
