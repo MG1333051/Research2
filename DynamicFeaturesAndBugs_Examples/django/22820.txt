@@ -1,0 +1,44 @@
+commit 502142179996e32e1c7f334c3d986f21115cfac8
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Sat Aug 30 18:48:55 2014 +0200
+
+    Fixed #22820 -- Treated int and long types alike in lazy_number
+    
+    Thanks kwist for the report and the initial patch.
+
+diff --git a/django/utils/translation/__init__.py b/django/utils/translation/__init__.py
+index e8ef6bd..505d753 100644
+--- a/django/utils/translation/__init__.py
++++ b/django/utils/translation/__init__.py
+@@ -101,7 +101,7 @@ pgettext_lazy = lazy(pgettext, six.text_type)
+ 
+ 
+ def lazy_number(func, resultclass, number=None, **kwargs):
+-    if isinstance(number, int):         ###########################isinstance
++    if isinstance(number, six.integer_types):    ###########################isinstance
+         kwargs['number'] = number
+         proxy = lazy(func, resultclass)(**kwargs)
+     else:
+diff --git a/tests/i18n/tests.py b/tests/i18n/tests.py
+index aa7602a..b7d82da 100644
+--- a/tests/i18n/tests.py
++++ b/tests/i18n/tests.py
+@@ -193,6 +193,17 @@ class TranslationTests(TestCase):
+             with six.assertRaisesRegex(self, KeyError, 'Your dictionary lacks key.*'):
+                 complex_context_deferred % {'name': 'Jim'}
+ 
++    @skipUnless(six.PY2, "PY3 doesn't distinct int and long types")
++    def test_ungettext_lazy_long(self):
++        """
++        Regression test for #22820: int and long should be treated alike in ungettext_lazy.
++        """
++        result = ungettext_lazy('%(name)s has %(num)d good result', '%(name)s has %(num)d good results', 4)
++        self.assertEqual(result % {'name': 'Joe', 'num': 4}, "Joe has 4 good results")
++        # Now with a long
++        result = ungettext_lazy('%(name)s has %(num)d good result', '%(name)s has %(num)d good results', long(4))
++        self.assertEqual(result % {'name': 'Joe', 'num': 4}, "Joe has 4 good results")
++
+     @override_settings(LOCALE_PATHS=extended_locale_paths)
+     def test_pgettext(self):
+         trans_real._active = local()
+

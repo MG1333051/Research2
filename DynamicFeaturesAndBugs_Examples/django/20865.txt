@@ -1,0 +1,45 @@
+commit d53e574676ba0809394017f1f3a5bc24512e5bed
+Author: Collin Anderson <collin@onetencommunications.com>
+Date:   Tue Aug 6 12:38:31 2013 -0400
+
+    Fixed #20865 -- Fixed raw_id_fields to work with callable limit_choices_to.
+
+diff --git a/django/contrib/admin/widgets.py b/django/contrib/admin/widgets.py
+index eeae846..c4b15cd 100644
+--- a/django/contrib/admin/widgets.py
++++ b/django/contrib/admin/widgets.py
+@@ -116,6 +116,8 @@ def url_params_from_lookup_dict(lookups):
+     if lookups and hasattr(lookups, 'items'):
+         items = []
+         for k, v in lookups.items():
++            if callable(v):                       ##################callable
++                v = v()
+             if isinstance(v, (tuple, list)):
+                 v = ','.join([str(x) for x in v])
+             elif isinstance(v, bool):
+diff --git a/tests/admin_widgets/tests.py b/tests/admin_widgets/tests.py
+index d4521a5..5a88df1 100644
+--- a/tests/admin_widgets/tests.py
++++ b/tests/admin_widgets/tests.py
+@@ -226,6 +226,13 @@ class AdminForeignKeyRawIdWidget(DjangoTestCase):
+         self.assertEqual(lookup1, {'color__in': 'red,blue'})
+         self.assertEqual(lookup1, lookup2)
+ 
++    def test_url_params_from_lookup_dict_callable(self):
++        def my_callable():
++            return 'works'
++        lookup1 = widgets.url_params_from_lookup_dict({'myfield': my_callable})
++        lookup2 = widgets.url_params_from_lookup_dict({'myfield': my_callable()})
++        self.assertEqual(lookup1, lookup2)
++
+ 
+ class FilteredSelectMultipleWidgetTest(DjangoTestCase):
+     def test_render(self):
+@@ -915,4 +922,4 @@ class AdminRawIdWidgetSeleniumChromeTests(AdminRawIdWidgetSeleniumFirefoxTests):
+     webdriver_class = 'selenium.webdriver.chrome.webdriver.WebDriver'
+ 
+ class AdminRawIdWidgetSeleniumIETests(AdminRawIdWidgetSeleniumFirefoxTests):
+-    webdriver_class = 'selenium.webdriver.ie.webdriver.WebDriver'
+\ No newline at end of file
++    webdriver_class = 'selenium.webdriver.ie.webdriver.WebDriver'
+

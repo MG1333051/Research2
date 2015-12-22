@@ -1,0 +1,52 @@
+commit a10b4c010ab2cdaa6ba8bfaec3e3540299ea77be
+Author: Tim Graham <timograham@gmail.com>
+Date:   Tue Apr 7 09:08:05 2015 -0400
+
+    Fixed #24578 -- Fixed crash with QuerySet.update() on FK to O2O fields.
+    
+    Thanks Anssi Kääriäinen for review.
+
+diff --git a/django/db/models/base.py b/django/db/models/base.py
+index b5d1403..82b428b 100644
+--- a/django/db/models/base.py
++++ b/django/db/models/base.py
+@@ -878,7 +878,7 @@ class Model(six.with_metaclass(ModelBase)):
+     def prepare_database_save(self, field):
+         if self.pk is None:
+             raise ValueError("Unsaved model instance %r cannot be used in an ORM query." % self)
+-        return getattr(self, field.remote_field.field_name)            ##############getattr
++        return getattr(self, field.remote_field.get_related_field().attname)  ##############getattr
+ 
+     def clean(self):
+         """
+diff --git a/docs/releases/1.8.1.txt b/docs/releases/1.8.1.txt
+index ac986b3..5df9982 100644
+--- a/docs/releases/1.8.1.txt
++++ b/docs/releases/1.8.1.txt
+@@ -28,3 +28,6 @@ Bugfixes
+ 
+ * Fixed a migration crash when altering
+   :class:`~django.db.models.ManyToManyField`\s (:ticket:`24513`).
++
++* Fixed a crash with ``QuerySet.update()`` on foreign keys to one-to-one fields
++  (:ticket:`24578`).
+diff --git a/tests/one_to_one/tests.py b/tests/one_to_one/tests.py
+index 4047e2d..6604299 100644
+--- a/tests/one_to_one/tests.py
++++ b/tests/one_to_one/tests.py
+@@ -468,3 +468,14 @@ class OneToOneTests(TestCase):
+         # refs #21563
+         self.assertFalse(hasattr(Director(), 'director'))
+         self.assertFalse(hasattr(School(), 'school'))
++
++    def test_update_one_to_one_pk(self):
++        p1 = Place.objects.create()
++        p2 = Place.objects.create()
++        r1 = Restaurant.objects.create(place=p1)
++        r2 = Restaurant.objects.create(place=p2)
++        w = Waiter.objects.create(restaurant=r1)
++
++        Waiter.objects.update(restaurant=r2)
++        w.refresh_from_db()
++        self.assertEqual(w.restaurant, r2)
+

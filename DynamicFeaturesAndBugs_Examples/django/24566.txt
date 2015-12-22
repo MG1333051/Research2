@@ -1,0 +1,49 @@
+commit 30a3c2f74c030449d3a8b9f02ab6744874712e54
+Author: Baptiste Mispelon <bmispelon@gmail.com>
+Date:   Thu Apr 2 16:49:41 2015 +0200
+
+    Fixed #24566 -- Added support for serializing timedelta
+    
+    Thanks to knbk for the report.
+
+diff --git a/django/db/migrations/writer.py b/django/db/migrations/writer.py
+index f4f43ac..99db9d1 100644
+--- a/django/db/migrations/writer.py
++++ b/django/db/migrations/writer.py
+@@ -351,6 +351,9 @@ class MigrationWriter(object):
+             if isinstance(value, datetime_safe.time):
+                 value_repr = "datetime.%s" % value_repr
+             return value_repr, {"import datetime"}
++        # Timedeltas
++        elif isinstance(value, datetime.timedelta):      ######################isinstance
++            return repr(value), {"import datetime"}
+         # Settings references
+         elif isinstance(value, SettingsReference):
+             return "settings.%s" % value.setting_name, {"from django.conf import settings"}
+diff --git a/docs/releases/1.8.1.txt b/docs/releases/1.8.1.txt
+index c449eab..1dff617 100644
+--- a/docs/releases/1.8.1.txt
++++ b/docs/releases/1.8.1.txt
+@@ -9,4 +9,5 @@ Django 1.8.1 fixes several bugs in 1.8.
+ Bugfixes
+ ========
+ 
+-* ...
++* Added support for serializing :class:`~datetime.timedelta` objects in
++  migrations (:ticket:`24566`).
+diff --git a/tests/migrations/test_writer.py b/tests/migrations/test_writer.py
+index aa12c7c..d2bd491 100644
+--- a/tests/migrations/test_writer.py
++++ b/tests/migrations/test_writer.py
+@@ -351,6 +351,10 @@ class WriterTests(TestCase):
+         self.assertSerializedEqual(frozenset())
+         self.assertSerializedEqual(frozenset("let it go"))
+ 
++    def test_serialize_timedelta(self):
++        self.assertSerializedEqual(datetime.timedelta())
++        self.assertSerializedEqual(datetime.timedelta(minutes=42))
++
+     def test_simple_migration(self):
+         """
+         Tests serializing a simple migration.
+

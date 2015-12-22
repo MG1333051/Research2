@@ -1,0 +1,59 @@
+commit 17ed99f3a3eea4bd27fa34be59c3582616ed8079
+Author: Loic Bistuer <loic.bistuer@sixmedia.com>
+Date:   Thu Nov 14 16:32:55 2013 +0700
+
+    Fixed #21432 -- DateTimeQuery now copies tzinfo when cloning.
+    
+    Thanks Enrique Martínez for the report and @bmispelon for the tests.
+
+diff --git a/django/db/models/sql/subqueries.py b/django/db/models/sql/subqueries.py
+index 17438bc..79db1ad 100644
+--- a/django/db/models/sql/subqueries.py
++++ b/django/db/models/sql/subqueries.py
+@@ -260,6 +260,11 @@ class DateTimeQuery(DateQuery):
+ 
+     compiler = 'SQLDateTimeCompiler'
+ 
++    def clone(self, klass=None, memo=None, **kwargs):
++        if 'tzinfo' not in kwargs and hasattr(self, 'tzinfo'):           ##############hasattr
++            kwargs['tzinfo'] = self.tzinfo
++        return super(DateTimeQuery, self).clone(klass, memo, **kwargs)
++
+     def _check_field(self, field):
+         assert isinstance(field, DateTimeField), \
+             "%r isn't a DateTimeField." % field.name
+diff --git a/tests/datetimes/tests.py b/tests/datetimes/tests.py
+index f54b30d..ee0b676 100644
+--- a/tests/datetimes/tests.py
++++ b/tests/datetimes/tests.py
+@@ -1,8 +1,16 @@
+ from __future__ import unicode_literals
+ 
+ import datetime
++from unittest import skipIf
++
++try:
++    import pytz
++except ImportError:
++    pytz = None
++
++from django.test import TestCase, override_settings
++from django.utils import timezone
+ 
+-from django.test import TestCase
+ 
+ from .models import Article, Comment, Category
+ 
+@@ -81,3 +89,11 @@ class DateTimesTests(TestCase):
+             ],
+             lambda d: d,
+         )
++
++    @skipIf(pytz is None, "this test requires pytz")
++    @override_settings(USE_TZ=True)
++    def test_21432(self):
++        now = timezone.localtime(timezone.now().replace(microsecond=0))
++        Article.objects.create(title="First one", pub_date=now)
++        qs = Article.objects.datetimes('pub_date', 'second')
++        self.assertEqual(qs[0], now)
+
