@@ -1,0 +1,3423 @@
+commit 9012833af857e081b515ce760685b157638efcef
+Author: Carl Meyer <carl@oddbird.net>
+Date:   Fri May 10 23:08:45 2013 -0400
+
+    Fixed #17365, #17366, #18727 -- Switched to discovery test runner.
+    
+    Thanks to Preston Timmons for the bulk of the work on the patch, especially
+    updating Django's own test suite to comply with the requirements of the new
+    runner. Thanks also to Jannis Leidel and Mahdi Yusuf for earlier work on the
+    patch and the discovery runner.
+    
+    Refs #11077, #17032, and #18670.
+
+diff --git a/.gitignore b/.gitignore
+index 2d028c7..0ad4e34 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,4 +5,4 @@ MANIFEST
+ dist/
+ docs/_build/
+ tests/coverage_html/
+-tests/.coverage
+\ No newline at end of file
++tests/.coverage
+diff --git a/django/conf/global_settings.py b/django/conf/global_settings.py
+index a9af4ba..53aef35 100644
+--- a/django/conf/global_settings.py
++++ b/django/conf/global_settings.py
+@@ -576,7 +576,7 @@ DEFAULT_EXCEPTION_REPORTER_FILTER = 'django.views.debug.SafeExceptionReporterFil
+ ###########
+ 
+ # The name of the class to use to run the test suite
+-TEST_RUNNER = 'django.test.simple.DjangoTestSuiteRunner'
++TEST_RUNNER = 'django.test.runner.DiscoverRunner'
+ 
+ ############
+ # FIXTURES #
+diff --git a/django/contrib/admindocs/tests/__init__.py b/django/contrib/admindocs/tests/__init__.py
+index 2a67f83..e69de29 100644
+--- a/django/contrib/admindocs/tests/__init__.py
++++ b/django/contrib/admindocs/tests/__init__.py
+@@ -1 +0,0 @@
+-from .test_fields import TestFieldType
+diff --git a/django/contrib/auth/tests/__init__.py b/django/contrib/auth/tests/__init__.py
+index 2e35e33..2c30864 100644
+--- a/django/contrib/auth/tests/__init__.py
++++ b/django/contrib/auth/tests/__init__.py
+@@ -1,16 +1 @@
+-from django.contrib.auth.tests.test_custom_user import *
+-from django.contrib.auth.tests.test_auth_backends import *
+-from django.contrib.auth.tests.test_basic import *
+-from django.contrib.auth.tests.test_context_processors import *
+-from django.contrib.auth.tests.test_decorators import *
+-from django.contrib.auth.tests.test_forms import *
+-from django.contrib.auth.tests.test_remote_user import *
+-from django.contrib.auth.tests.test_management import *
+-from django.contrib.auth.tests.test_models import *
+-from django.contrib.auth.tests.test_handlers import *
+-from django.contrib.auth.tests.test_hashers import *
+-from django.contrib.auth.tests.test_signals import *
+-from django.contrib.auth.tests.test_tokens import *
+-from django.contrib.auth.tests.test_views import *
+-
+ # The password for the fixture data users is 'password'
+diff --git a/django/contrib/auth/tests/test_handlers.py b/django/contrib/auth/tests/test_handlers.py
+index 41063aa..e0d2fa2 100644
+--- a/django/contrib/auth/tests/test_handlers.py
++++ b/django/contrib/auth/tests/test_handlers.py
+@@ -2,7 +2,7 @@ from __future__ import unicode_literals
+ 
+ from django.contrib.auth.handlers.modwsgi import check_password, groups_for_user
+ from django.contrib.auth.models import User, Group
+-from django.contrib.auth.tests import CustomUser
++from django.contrib.auth.tests.test_custom_user import CustomUser
+ from django.contrib.auth.tests.utils import skipIfCustomUser
+ from django.test import TransactionTestCase
+ from django.test.utils import override_settings
+diff --git a/django/contrib/auth/tests/test_management.py b/django/contrib/auth/tests/test_management.py
+index 687a5c3..04fd494 100644
+--- a/django/contrib/auth/tests/test_management.py
++++ b/django/contrib/auth/tests/test_management.py
+@@ -5,7 +5,7 @@ from django.contrib.auth import models, management
+ from django.contrib.auth.management import create_permissions
+ from django.contrib.auth.management.commands import changepassword
+ from django.contrib.auth.models import User
+-from django.contrib.auth.tests import CustomUser
++from django.contrib.auth.tests.test_custom_user import CustomUser
+ from django.contrib.auth.tests.utils import skipIfCustomUser
+ from django.core.management import call_command
+ from django.core.management.base import CommandError
+diff --git a/django/contrib/flatpages/tests/__init__.py b/django/contrib/flatpages/tests/__init__.py
+index 3703e23..e69de29 100644
+--- a/django/contrib/flatpages/tests/__init__.py
++++ b/django/contrib/flatpages/tests/__init__.py
+@@ -1,6 +0,0 @@
+-from django.contrib.flatpages.tests.test_csrf import *
+-from django.contrib.flatpages.tests.test_forms import *
+-from django.contrib.flatpages.tests.test_models import *
+-from django.contrib.flatpages.tests.test_middleware import *
+-from django.contrib.flatpages.tests.test_templatetags import *
+-from django.contrib.flatpages.tests.test_views import *
+diff --git a/django/contrib/formtools/tests/__init__.py b/django/contrib/formtools/tests/__init__.py
+index 2bbeea8..e69de29 100644
+--- a/django/contrib/formtools/tests/__init__.py
++++ b/django/contrib/formtools/tests/__init__.py
+@@ -1,2 +0,0 @@
+-from django.contrib.formtools.tests.tests import *
+-from django.contrib.formtools.tests.wizard import *
+diff --git a/django/contrib/formtools/tests/urls.py b/django/contrib/formtools/tests/urls.py
+index 739095d..f96f89e 100644
+--- a/django/contrib/formtools/tests/urls.py
++++ b/django/contrib/formtools/tests/urls.py
+@@ -5,7 +5,7 @@ This is a URLconf to be loaded by tests.py. Add any URLs needed for tests only.
+ from __future__ import absolute_import
+ 
+ from django.conf.urls import patterns, url
+-from django.contrib.formtools.tests import TestFormPreview
++from django.contrib.formtools.tests.tests import TestFormPreview
+ 
+ from django.contrib.formtools.tests.forms import TestForm
+ 
+diff --git a/django/contrib/gis/gdal/__init__.py b/django/contrib/gis/gdal/__init__.py
+index c33fbcb..2aa867b 100644
+--- a/django/contrib/gis/gdal/__init__.py
++++ b/django/contrib/gis/gdal/__init__.py
+@@ -31,6 +31,9 @@
+  to a non-existant file location (e.g., `GDAL_LIBRARY_PATH='/null/path'`;
+  setting to None/False/'' will not work as a string must be given).
+ """
++from django.contrib.gis.gdal.error import check_err, OGRException, OGRIndexError, SRSException
++from django.contrib.gis.gdal.geomtype import OGRGeomType
++
+ # Attempting to import objects that depend on the GDAL library.  The
+ # HAS_GDAL flag will be set to True if the library is present on
+ # the system.
+@@ -41,7 +44,7 @@ try:
+     from django.contrib.gis.gdal.srs import SpatialReference, CoordTransform
+     from django.contrib.gis.gdal.geometries import OGRGeometry
+     HAS_GDAL = True
+-except Exception:
++except OGRException:
+     HAS_GDAL = False
+ 
+ try:
+@@ -50,5 +53,3 @@ except ImportError:
+     # No ctypes, but don't raise an exception.
+     pass
+ 
+-from django.contrib.gis.gdal.error import check_err, OGRException, OGRIndexError, SRSException
+-from django.contrib.gis.gdal.geomtype import OGRGeomType
+diff --git a/django/contrib/gis/gdal/tests/__init__.py b/django/contrib/gis/gdal/tests/__init__.py
+index 262d294..e69de29 100644
+--- a/django/contrib/gis/gdal/tests/__init__.py
++++ b/django/contrib/gis/gdal/tests/__init__.py
+@@ -1,28 +0,0 @@
+-"""
+-Module for executing all of the GDAL tests.  None
+-of these tests require the use of the database.
+-"""
+-from __future__ import absolute_import
+-
+-from django.utils.unittest import TestSuite, TextTestRunner
+-
+-# Importing the GDAL test modules.
+-from . import test_driver, test_ds, test_envelope, test_geom, test_srs
+-
+-test_suites = [test_driver.suite(),
+-               test_ds.suite(),
+-               test_envelope.suite(),
+-               test_geom.suite(),
+-               test_srs.suite(),
+-               ]
+-
+-def suite():
+-    "Builds a test suite for the GDAL tests."
+-    s = TestSuite()
+-    for test_suite in test_suites:
+-        s.addTest(test_suite)
+-    return s
+-
+-def run(verbosity=1):
+-    "Runs the GDAL tests."
+-    TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/gdal/tests/test_driver.py b/django/contrib/gis/gdal/tests/test_driver.py
+index 06ec93f..c27302d 100644
+--- a/django/contrib/gis/gdal/tests/test_driver.py
++++ b/django/contrib/gis/gdal/tests/test_driver.py
+@@ -1,5 +1,10 @@
+-import unittest
+-from django.contrib.gis.gdal import Driver, OGRException
++from django.contrib.gis.gdal import HAS_GDAL
++from django.utils import unittest
++from django.utils.unittest import skipUnless
++
++if HAS_GDAL:
++    from django.contrib.gis.gdal import Driver, OGRException
++
+ 
+ valid_drivers = ('ESRI Shapefile', 'MapInfo File', 'TIGER', 'S57', 'DGN',
+                  'Memory', 'CSV', 'GML', 'KML')
+@@ -12,6 +17,8 @@ aliases = {'eSrI' : 'ESRI Shapefile',
+            'sHp' : 'ESRI Shapefile',
+            }
+ 
++
++@skipUnless(HAS_GDAL, "GDAL is required")
+ class DriverTest(unittest.TestCase):
+ 
+     def test01_valid_driver(self):
+@@ -30,11 +37,3 @@ class DriverTest(unittest.TestCase):
+         for alias, full_name in aliases.items():
+             dr = Driver(alias)
+             self.assertEqual(full_name, str(dr))
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(DriverTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/gdal/tests/test_ds.py b/django/contrib/gis/gdal/tests/test_ds.py
+index a87a1c6..3664f05 100644
+--- a/django/contrib/gis/gdal/tests/test_ds.py
++++ b/django/contrib/gis/gdal/tests/test_ds.py
+@@ -1,32 +1,38 @@
+ import os
+-import unittest
+-from django.contrib.gis.gdal import DataSource, Envelope, OGRGeometry, OGRException, OGRIndexError, GDAL_VERSION
+-from django.contrib.gis.gdal.field import OFTReal, OFTInteger, OFTString
+-from django.contrib.gis.geometry.test_data import get_ds_file, TestDS, TEST_DATA
+-
+-
+-# List of acceptable data sources.
+-ds_list = (TestDS('test_point', nfeat=5, nfld=3, geom='POINT', gtype=1, driver='ESRI Shapefile',
+-                  fields={'dbl' : OFTReal, 'int' : OFTInteger, 'str' : OFTString,},
+-                  extent=(-1.35011,0.166623,-0.524093,0.824508), # Got extent from QGIS
+-                  srs_wkt='GEOGCS["GCS_WGS_1984",DATUM["WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]',
+-                  field_values={'dbl' : [float(i) for i in range(1, 6)], 'int' : list(range(1, 6)), 'str' : [str(i) for i in range(1, 6)]},
+-                  fids=range(5)),
+-           TestDS('test_vrt', ext='vrt', nfeat=3, nfld=3, geom='POINT', gtype='Point25D', driver='VRT',
+-                  fields={'POINT_X' : OFTString, 'POINT_Y' : OFTString, 'NUM' : OFTString}, # VRT uses CSV, which all types are OFTString.
+-                  extent=(1.0, 2.0, 100.0, 523.5), # Min/Max from CSV
+-                  field_values={'POINT_X' : ['1.0', '5.0', '100.0'], 'POINT_Y' : ['2.0', '23.0', '523.5'], 'NUM' : ['5', '17', '23']},
+-                  fids=range(1,4)),
+-           TestDS('test_poly', nfeat=3, nfld=3, geom='POLYGON', gtype=3,
+-                  driver='ESRI Shapefile',
+-                  fields={'float' : OFTReal, 'int' : OFTInteger, 'str' : OFTString,},
+-                  extent=(-1.01513,-0.558245,0.161876,0.839637), # Got extent from QGIS
+-                  srs_wkt='GEOGCS["GCS_WGS_1984",DATUM["WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'),
+-           )
+-
+-bad_ds = (TestDS('foo'),
+-          )
+ 
++from django.contrib.gis.gdal import HAS_GDAL
++from django.contrib.gis.geometry.test_data import get_ds_file, TestDS, TEST_DATA
++from django.utils import unittest
++from django.utils.unittest import skipUnless
++
++if HAS_GDAL:
++    from django.contrib.gis.gdal import DataSource, Envelope, OGRGeometry, OGRException, OGRIndexError, GDAL_VERSION
++    from django.contrib.gis.gdal.field import OFTReal, OFTInteger, OFTString
++
++    # List of acceptable data sources.
++    ds_list = (
++        TestDS('test_point', nfeat=5, nfld=3, geom='POINT', gtype=1, driver='ESRI Shapefile',
++            fields={'dbl' : OFTReal, 'int' : OFTInteger, 'str' : OFTString,},
++            extent=(-1.35011,0.166623,-0.524093,0.824508), # Got extent from QGIS
++            srs_wkt='GEOGCS["GCS_WGS_1984",DATUM["WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]',
++            field_values={'dbl' : [float(i) for i in range(1, 6)], 'int' : list(range(1, 6)), 'str' : [str(i) for i in range(1, 6)]},
++            fids=range(5)),
++        TestDS('test_vrt', ext='vrt', nfeat=3, nfld=3, geom='POINT', gtype='Point25D', driver='VRT',
++            fields={'POINT_X' : OFTString, 'POINT_Y' : OFTString, 'NUM' : OFTString}, # VRT uses CSV, which all types are OFTString.
++            extent=(1.0, 2.0, 100.0, 523.5), # Min/Max from CSV
++            field_values={'POINT_X' : ['1.0', '5.0', '100.0'], 'POINT_Y' : ['2.0', '23.0', '523.5'], 'NUM' : ['5', '17', '23']},
++            fids=range(1,4)),
++        TestDS('test_poly', nfeat=3, nfld=3, geom='POLYGON', gtype=3,
++            driver='ESRI Shapefile',
++            fields={'float' : OFTReal, 'int' : OFTInteger, 'str' : OFTString,},
++            extent=(-1.01513,-0.558245,0.161876,0.839637), # Got extent from QGIS
++            srs_wkt='GEOGCS["GCS_WGS_1984",DATUM["WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'),
++    )
++
++bad_ds = (TestDS('foo'),)
++
++
++@skipUnless(HAS_GDAL, "GDAL is required")
+ class DataSourceTest(unittest.TestCase):
+ 
+     def test01_valid_shp(self):
+@@ -236,11 +242,3 @@ class DataSourceTest(unittest.TestCase):
+         feat = ds[0][0]
+         # Reference value obtained using `ogrinfo`.
+         self.assertEqual(676586997978, feat.get('ALAND10'))
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(DataSourceTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/gdal/tests/test_envelope.py b/django/contrib/gis/gdal/tests/test_envelope.py
+index 07e12c0..7518dc6 100644
+--- a/django/contrib/gis/gdal/tests/test_envelope.py
++++ b/django/contrib/gis/gdal/tests/test_envelope.py
+@@ -1,5 +1,9 @@
+-from django.contrib.gis.gdal import Envelope, OGRException
++from django.contrib.gis.gdal import HAS_GDAL
+ from django.utils import unittest
++from django.utils.unittest import skipUnless
++
++if HAS_GDAL:
++    from django.contrib.gis.gdal import Envelope, OGRException
+ 
+ 
+ class TestPoint(object):
+@@ -7,11 +11,13 @@ class TestPoint(object):
+         self.x = x
+         self.y = y
+ 
++
++@skipUnless(HAS_GDAL, "GDAL is required")
+ class EnvelopeTest(unittest.TestCase):
+ 
+     def setUp(self):
+         self.e = Envelope(0, 0, 5, 5)
+-
++    
+     def test01_init(self):
+         "Testing Envelope initilization."
+         e1 = Envelope((0, 0, 5, 5))
+@@ -85,11 +91,3 @@ class EnvelopeTest(unittest.TestCase):
+         self.assertEqual((-1, 0, 5, 5), self.e)
+         self.e.expand_to_include(TestPoint(10, 10))
+         self.assertEqual((-1, 0, 10, 10), self.e)
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(EnvelopeTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/gdal/tests/test_geom.py b/django/contrib/gis/gdal/tests/test_geom.py
+index 9b8ae6a..c048d2b 100644
+--- a/django/contrib/gis/gdal/tests/test_geom.py
++++ b/django/contrib/gis/gdal/tests/test_geom.py
+@@ -5,12 +5,19 @@ try:
+ except ImportError:
+     import pickle
+ 
+-from django.contrib.gis.gdal import (OGRGeometry, OGRGeomType, OGRException,
+-    OGRIndexError, SpatialReference, CoordTransform, GDAL_VERSION)
++from django.contrib.gis.gdal import HAS_GDAL
+ from django.contrib.gis.geometry.test_data import TestDataMixin
+ from django.utils.six.moves import xrange
+ from django.utils import unittest
++from django.utils.unittest import skipUnless
+ 
++if HAS_GDAL:
++    from django.contrib.gis.gdal import (OGRGeometry, OGRGeomType,
++        OGRException, OGRIndexError, SpatialReference, CoordTransform,
++        GDAL_VERSION)
++
++
++@skipUnless(HAS_GDAL, "GDAL is required")
+ class OGRGeomTest(unittest.TestCase, TestDataMixin):
+     "This tests the OGR Geometry."
+ 
+@@ -476,11 +483,3 @@ class OGRGeomTest(unittest.TestCase, TestDataMixin):
+         "Testing equivalence methods with non-OGRGeometry instances."
+         self.assertNotEqual(None, OGRGeometry('POINT(0 0)'))
+         self.assertEqual(False, OGRGeometry('LINESTRING(0 0, 1 1)') == 3)
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(OGRGeomTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/gdal/tests/test_srs.py b/django/contrib/gis/gdal/tests/test_srs.py
+index 3d3bba7..363b597 100644
+--- a/django/contrib/gis/gdal/tests/test_srs.py
++++ b/django/contrib/gis/gdal/tests/test_srs.py
+@@ -1,5 +1,9 @@
+-from django.contrib.gis.gdal import SpatialReference, CoordTransform, OGRException, SRSException
++from django.contrib.gis.gdal import HAS_GDAL
+ from django.utils import unittest
++from django.utils.unittest import skipUnless
++
++if HAS_GDAL:
++    from django.contrib.gis.gdal import SpatialReference, CoordTransform, OGRException, SRSException
+ 
+ 
+ class TestSRS:
+@@ -46,6 +50,8 @@ well_known = (TestSRS('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",637813
+ 
+ bad_srlist = ('Foobar', 'OOJCS["NAD83 / Texas South Central",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4269"]],PROJECTION["Lambert_Conformal_Conic_2SP"],PARAMETER["standard_parallel_1",30.28333333333333],PARAMETER["standard_parallel_2",28.38333333333333],PARAMETER["latitude_of_origin",27.83333333333333],PARAMETER["central_meridian",-99],PARAMETER["false_easting",600000],PARAMETER["false_northing",4000000],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AUTHORITY["EPSG","32140"]]',)
+ 
++
++@skipUnless(HAS_GDAL, "GDAL is required")
+ class SpatialRefTest(unittest.TestCase):
+ 
+     def test01_wkt(self):
+@@ -155,11 +161,3 @@ class SpatialRefTest(unittest.TestCase):
+         self.assertEqual('EPSG', s1['AUTHORITY'])
+         self.assertEqual(4326, int(s1['AUTHORITY', 1]))
+         self.assertEqual(None, s1['FOOBAR'])
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(SpatialRefTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/geoip/tests.py b/django/contrib/gis/geoip/tests.py
+index bb4a3e7..3fa64bf 100644
+--- a/django/contrib/gis/geoip/tests.py
++++ b/django/contrib/gis/geoip/tests.py
+@@ -3,16 +3,28 @@ from __future__ import unicode_literals
+ 
+ import os
+ from django.conf import settings
+-from django.contrib.gis.geos import GEOSGeometry
+-from django.contrib.gis.geoip import GeoIP, GeoIPException
++from django.contrib.gis.geos import HAS_GEOS
++from django.contrib.gis.geoip import HAS_GEOIP
+ from django.utils import unittest
++from django.utils.unittest import skipUnless
+ 
+ from django.utils import six
+ 
++if HAS_GEOIP:
++    from . import GeoIP, GeoIPException
++
++if HAS_GEOS:
++    from ..geos import GEOSGeometry
++
++
+ # Note: Requires use of both the GeoIP country and city datasets.
+ # The GEOIP_DATA path should be the only setting set (the directory
+ # should contain links or the actual database files 'GeoIP.dat' and
+ # 'GeoLiteCity.dat'.
++
++
++@skipUnless(HAS_GEOIP and getattr(settings, "GEOIP_PATH", None),            ################################getattr
++    "GeoIP is required along with the GEOIP_DATA setting.")
+ class GeoIPTest(unittest.TestCase):
+ 
+     def test01_init(self):
+@@ -70,6 +82,7 @@ class GeoIPTest(unittest.TestCase):
+             self.assertEqual({'country_code' : 'US', 'country_name' : 'United States'},
+                              g.country(query))
+ 
++    @skipUnless(HAS_GEOS, "Geos is required")
+     def test04_city(self):
+         "Testing GeoIP city querying methods."
+         g = GeoIP(country='<foo>')
+@@ -105,12 +118,3 @@ class GeoIPTest(unittest.TestCase):
+         g = GeoIP()
+         d = g.city("www.osnabrueck.de")
+         self.assertEqual('Osnabrück', d['city'])
+-
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(GeoIPTest))
+-    return s
+-
+-def run(verbosity=1):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/geos/__init__.py b/django/contrib/gis/geos/__init__.py
+index 5885a30..945f561 100644
+--- a/django/contrib/gis/geos/__init__.py
++++ b/django/contrib/gis/geos/__init__.py
+@@ -3,12 +3,18 @@ The GeoDjango GEOS module.  Please consult the GeoDjango documentation
+ for more details: 
+   http://geodjango.org/docs/geos.html
+ """
+-from django.contrib.gis.geos.geometry import GEOSGeometry, wkt_regex, hex_regex
+-from django.contrib.gis.geos.point import Point
+-from django.contrib.gis.geos.linestring import LineString, LinearRing
+-from django.contrib.gis.geos.polygon import Polygon
+-from django.contrib.gis.geos.collections import GeometryCollection, MultiPoint, MultiLineString, MultiPolygon
+-from django.contrib.gis.geos.error import GEOSException, GEOSIndexError
+-from django.contrib.gis.geos.io import WKTReader, WKTWriter, WKBReader, WKBWriter
+-from django.contrib.gis.geos.factory import fromfile, fromstr
+-from django.contrib.gis.geos.libgeos import geos_version, geos_version_info, GEOS_PREPARE
++try:
++    from .libgeos import geos_version, geos_version_info, GEOS_PREPARE
++    HAS_GEOS = True
++except ImportError:
++    HAS_GEOS = False
++
++if HAS_GEOS:
++    from .geometry import GEOSGeometry, wkt_regex, hex_regex
++    from .point import Point
++    from .linestring import LineString, LinearRing
++    from .polygon import Polygon
++    from .collections import GeometryCollection, MultiPoint, MultiLineString, MultiPolygon
++    from .error import GEOSException, GEOSIndexError
++    from .io import WKTReader, WKTWriter, WKBReader, WKBWriter
++    from .factory import fromfile, fromstr
+diff --git a/django/contrib/gis/geos/tests/__init__.py b/django/contrib/gis/geos/tests/__init__.py
+index 6b715d8..e69de29 100644
+--- a/django/contrib/gis/geos/tests/__init__.py
++++ b/django/contrib/gis/geos/tests/__init__.py
+@@ -1,28 +0,0 @@
+-"""
+-GEOS Testing module.
+-"""
+-from __future__ import absolute_import
+-
+-from django.utils.unittest import TestSuite, TextTestRunner
+-from . import test_geos, test_io, test_geos_mutation, test_mutable_list
+-
+-test_suites = [
+-    test_geos.suite(),
+-    test_io.suite(),
+-    test_geos_mutation.suite(),
+-    test_mutable_list.suite(),
+-    ]
+-
+-def suite():
+-    "Builds a test suite for the GEOS tests."
+-    s = TestSuite()
+-    for suite in test_suites:
+-        s.addTest(suite)
+-    return s
+-
+-def run(verbosity=1):
+-    "Runs the GEOS tests."
+-    TextTestRunner(verbosity=verbosity).run(suite())
+-
+-if __name__ == '__main__':
+-    run(2)
+diff --git a/django/contrib/gis/geos/tests/test_geos.py b/django/contrib/gis/geos/tests/test_geos.py
+index 66d890d..c7fe5b2 100644
+--- a/django/contrib/gis/geos/tests/test_geos.py
++++ b/django/contrib/gis/geos/tests/test_geos.py
+@@ -6,20 +6,28 @@ import random
+ from binascii import a2b_hex, b2a_hex
+ from io import BytesIO
+ 
++from django.contrib.gis.gdal import HAS_GDAL
++
+ from django.contrib.gis import memoryview
+-from django.contrib.gis.geos import (GEOSException, GEOSIndexError, GEOSGeometry,
+-    GeometryCollection, Point, MultiPoint, Polygon, MultiPolygon, LinearRing,
+-    LineString, MultiLineString, fromfile, fromstr, geos_version_info)
+-from django.contrib.gis.geos.base import gdal, numpy, GEOSBase
+-from django.contrib.gis.geos.libgeos import GEOS_PREPARE
+ from django.contrib.gis.geometry.test_data import TestDataMixin
+ 
+ from django.utils.encoding import force_bytes
+ from django.utils import six
+ from django.utils.six.moves import xrange
+ from django.utils import unittest
++from django.utils.unittest import skipUnless
++
++from .. import HAS_GEOS
++
++if HAS_GEOS:
++    from .. import (GEOSException, GEOSIndexError, GEOSGeometry,
++        GeometryCollection, Point, MultiPoint, Polygon, MultiPolygon, LinearRing,
++        LineString, MultiLineString, fromfile, fromstr, geos_version_info,
++        GEOS_PREPARE)
++    from ..base import gdal, numpy, GEOSBase
+ 
+ 
++@skipUnless(HAS_GEOS, "Geos is required.")
+ class GEOSTest(unittest.TestCase, TestDataMixin):
+ 
+     @property
+@@ -198,7 +206,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+                 self.assertEqual(srid, poly.shell.srid)
+                 self.assertEqual(srid, fromstr(poly.ewkt).srid) # Checking export
+ 
+-    @unittest.skipUnless(gdal.HAS_GDAL, "gdal is required")
++    @skipUnless(HAS_GDAL, "GDAL is required.")
+     def test_json(self):
+         "Testing GeoJSON input/output (via GDAL)."
+         for g in self.geometries.json_geoms:
+@@ -662,6 +670,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+         p3 = fromstr(p1.hex, srid=-1) # -1 is intended.
+         self.assertEqual(-1, p3.srid)
+ 
++    @skipUnless(HAS_GDAL, "GDAL is required.")
+     def test_custom_srid(self):
+         """ Test with a srid unknown from GDAL """
+         pnt = Point(111200, 220900, srid=999999)
+@@ -851,7 +860,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+         # And, they should be equal.
+         self.assertEqual(gc1, gc2)
+ 
+-    @unittest.skipUnless(gdal.HAS_GDAL, "gdal is required")
++    @skipUnless(HAS_GDAL, "GDAL is required.")
+     def test_gdal(self):
+         "Testing `ogr` and `srs` properties."
+         g1 = fromstr('POINT(5 23)')
+@@ -878,7 +887,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+         self.assertNotEqual(poly._ptr, cpy1._ptr)
+         self.assertNotEqual(poly._ptr, cpy2._ptr)
+ 
+-    @unittest.skipUnless(gdal.HAS_GDAL, "gdal is required to transform geometries")
++    @skipUnless(HAS_GDAL, "GDAL is required to transform geometries")
+     def test_transform(self):
+         "Testing `transform` method."
+         orig = GEOSGeometry('POINT (-104.609 38.255)', 4326)
+@@ -903,7 +912,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+             self.assertAlmostEqual(trans.x, p.x, prec)
+             self.assertAlmostEqual(trans.y, p.y, prec)
+ 
+-    @unittest.skipUnless(gdal.HAS_GDAL, "gdal is required to transform geometries")
++    @skipUnless(HAS_GDAL, "GDAL is required to transform geometries")
+     def test_transform_3d(self):
+         p3d = GEOSGeometry('POINT (5 23 100)', 4326)
+         p3d.transform(2774)
+@@ -912,6 +921,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+         else:
+             self.assertIsNone(p3d.z)
+ 
++    @skipUnless(HAS_GDAL, "GDAL is required.")
+     def test_transform_noop(self):
+         """ Testing `transform` method (SRID match) """
+         # transform() should no-op if source & dest SRIDs match,
+@@ -962,6 +972,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+         g = GEOSGeometry('POINT (-104.609 38.255)', srid=-1)
+         self.assertRaises(GEOSException, g.transform, 2774, clone=True)
+ 
++    @skipUnless(HAS_GDAL, "GDAL is required.")
+     def test_transform_nogdal(self):
+         """ Testing `transform` method (GDAL not available) """
+         old_has_gdal = gdal.HAS_GDAL
+@@ -1016,7 +1027,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+                 self.assertEqual(geom, tmpg)
+                 if not no_srid: self.assertEqual(geom.srid, tmpg.srid)
+ 
+-    @unittest.skipUnless(GEOS_PREPARE, "geos >= 3.1.0 is required")
++    @skipUnless(HAS_GEOS and GEOS_PREPARE, "geos >= 3.1.0 is required")
+     def test_prepared(self):
+         "Testing PreparedGeometry support."
+         # Creating a simple multipolygon and getting a prepared version.
+@@ -1043,7 +1054,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+         for geom, merged in zip(ref_geoms, ref_merged):
+             self.assertEqual(merged, geom.merged)
+ 
+-    @unittest.skipUnless(GEOS_PREPARE, "geos >= 3.1.0 is required")
++    @skipUnless(HAS_GEOS and GEOS_PREPARE, "geos >= 3.1.0 is required")
+     def test_valid_reason(self):
+         "Testing IsValidReason support"
+ 
+@@ -1058,7 +1069,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+         self.assertIsInstance(g.valid_reason, six.string_types)
+         self.assertTrue(g.valid_reason.startswith("Too few points in geometry component"))
+ 
+-    @unittest.skipUnless(geos_version_info()['version'] >= '3.2.0', "geos >= 3.2.0 is required")
++    @skipUnless(HAS_GEOS and geos_version_info()['version'] >= '3.2.0', "geos >= 3.2.0 is required")
+     def test_linearref(self):
+         "Testing linear referencing"
+ 
+@@ -1091,12 +1102,3 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
+             self.assertTrue(m, msg="Unable to parse the version string '%s'" % v_init)
+             self.assertEqual(m.group('version'), v_geos)
+             self.assertEqual(m.group('capi_version'), v_capi)
+-
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(GEOSTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/geos/tests/test_geos_mutation.py b/django/contrib/gis/geos/tests/test_geos_mutation.py
+index 0c69b2b..40b708a 100644
+--- a/django/contrib/gis/geos/tests/test_geos_mutation.py
++++ b/django/contrib/gis/geos/tests/test_geos_mutation.py
+@@ -2,15 +2,23 @@
+ # Modified from original contribution by Aryeh Leib Taurog, which was
+ # released under the New BSD license.
+ 
+-from django.contrib.gis.geos import *
+-from django.contrib.gis.geos.error import GEOSIndexError
+ from django.utils import unittest
++from django.utils.unittest import skipUnless
++
++from .. import HAS_GEOS
++
++if HAS_GEOS:
++    from .. import *
++    from ..error import GEOSIndexError
++
+ 
+ def getItem(o,i): return o[i]
+ def delItem(o,i): del o[i]
+ def setItem(o,i,v): o[i] = v
+ 
+-def api_get_distance(x): return x.distance(Point(-200,-200))
++if HAS_GEOS:
++    def api_get_distance(x): return x.distance(Point(-200,-200))
++
+ def api_get_buffer(x): return x.buffer(10)
+ def api_get_geom_typeid(x): return x.geom_typeid
+ def api_get_num_coords(x): return x.num_coords
+@@ -29,6 +37,8 @@ geos_function_tests =  [ val for name, val in vars().items()
+                         if hasattr(val, '__call__')
+                         and name.startswith('api_get_') ]
+ 
++
++@skipUnless(HAS_GEOS, "Geos is required.")
+ class GEOSMutationTest(unittest.TestCase):
+     """
+     Tests Pythonic Mutability of Python GEOS geometry wrappers
+@@ -122,14 +132,3 @@ class GEOSMutationTest(unittest.TestCase):
+             lsa = MultiPoint(*map(Point,((5,5),(3,-2),(8,1))))
+             for f in geos_function_tests:
+                 self.assertEqual(f(lsa), f(mp), 'MultiPoint ' + f.__name__)
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(GEOSMutationTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+-
+-if __name__ == '__main__':
+-    run()
+diff --git a/django/contrib/gis/geos/tests/test_io.py b/django/contrib/gis/geos/tests/test_io.py
+index 45a9a22..38ca2e0 100644
+--- a/django/contrib/gis/geos/tests/test_io.py
++++ b/django/contrib/gis/geos/tests/test_io.py
+@@ -4,10 +4,16 @@ import binascii
+ import unittest
+ 
+ from django.contrib.gis import memoryview
+-from django.contrib.gis.geos import GEOSGeometry, WKTReader, WKTWriter, WKBReader, WKBWriter, geos_version_info
+ from django.utils import six
++from django.utils.unittest import skipUnless
+ 
++from ..import HAS_GEOS
+ 
++if HAS_GEOS:
++    from .. import GEOSGeometry, WKTReader, WKTWriter, WKBReader, WKBWriter, geos_version_info
++
++
++@skipUnless(HAS_GEOS, "Geos is required.")
+ class GEOSIOTest(unittest.TestCase):
+ 
+     def test01_wktreader(self):
+@@ -109,11 +115,3 @@ class GEOSIOTest(unittest.TestCase):
+             wkb_w.srid = True
+             self.assertEqual(hex3d_srid, wkb_w.write_hex(g))
+             self.assertEqual(wkb3d_srid, wkb_w.write(g))
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(GEOSIOTest))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+diff --git a/django/contrib/gis/geos/tests/test_mutable_list.py b/django/contrib/gis/geos/tests/test_mutable_list.py
+index 988d841..a4a56f2 100644
+--- a/django/contrib/gis/geos/tests/test_mutable_list.py
++++ b/django/contrib/gis/geos/tests/test_mutable_list.py
+@@ -395,15 +395,3 @@ class ListMixinTest(unittest.TestCase):
+ 
+ class ListMixinTestSingle(ListMixinTest):
+     listType = UserListB
+-
+-def suite():
+-    s = unittest.TestSuite()
+-    s.addTest(unittest.makeSuite(ListMixinTest))
+-    s.addTest(unittest.makeSuite(ListMixinTestSingle))
+-    return s
+-
+-def run(verbosity=2):
+-    unittest.TextTestRunner(verbosity=verbosity).run(suite())
+-
+-if __name__ == '__main__':
+-    run()
+diff --git a/django/contrib/gis/tests/__init__.py b/django/contrib/gis/tests/__init__.py
+index 765c030..1703f3f 100644
+--- a/django/contrib/gis/tests/__init__.py
++++ b/django/contrib/gis/tests/__init__.py
+@@ -1,13 +1,4 @@
+-from django.conf import settings
+-from django.test.simple import build_suite, DjangoTestSuiteRunner
+-from django.utils import unittest
+-
+-from .test_geoforms import GeometryFieldTest
+-from .test_measure import DistanceTest, AreaTest
+-from .test_spatialrefsys import SpatialRefSysTest
+-
+-
+-def geo_apps(namespace=True, runtests=False):
++def geo_apps():
+     """
+     Returns a list of GeoDjango test applications that reside in
+     `django.contrib.gis.tests` that can be used with the current
+@@ -36,88 +27,4 @@ def geo_apps(namespace=True, runtests=False):
+         # 3D apps use LayerMapping, which uses GDAL and require GEOS 3.1+.
+         if connection.ops.postgis and GEOS_PREPARE:
+             apps.append('geo3d')
+-    if runtests:
+-        return [('django.contrib.gis.tests', app) for app in apps]
+-    elif namespace:
+-        return ['django.contrib.gis.tests.%s' % app
+-                for app in apps]
+-    else:
+-        return apps
+-
+-
+-def geodjango_suite(apps=True):
+-    """
+-    Returns a TestSuite consisting only of GeoDjango tests that can be run.
+-    """
+-    import sys
+-    from django.db.models import get_app
+-
+-    suite = unittest.TestSuite()
+-
+-    # Adding the GEOS tests.
+-    from django.contrib.gis.geos import tests as geos_tests
+-    suite.addTest(geos_tests.suite())
+-
+-    # Adding GDAL tests, and any test suite that depends on GDAL, to the
+-    # suite if GDAL is available.
+-    from django.contrib.gis.gdal import HAS_GDAL
+-    if HAS_GDAL:
+-        from django.contrib.gis.gdal import tests as gdal_tests
+-        suite.addTest(gdal_tests.suite())
+-    else:
+-        sys.stderr.write('GDAL not available - no tests requiring GDAL will be run.\n')
+-
+-    # Add GeoIP tests to the suite, if the library and data is available.
+-    from django.contrib.gis.geoip import HAS_GEOIP
+-    if HAS_GEOIP and hasattr(settings, 'GEOIP_PATH'):
+-        from django.contrib.gis.geoip import tests as geoip_tests
+-        suite.addTest(geoip_tests.suite())
+-
+-    # Finally, adding the suites for each of the GeoDjango test apps.
+-    if apps:
+-        for app_name in geo_apps(namespace=False):
+-            suite.addTest(build_suite(get_app(app_name)))
+-
+-    return suite
+-
+-
+-class GeoDjangoTestSuiteRunner(DjangoTestSuiteRunner):
+-
+-    def setup_test_environment(self, **kwargs):
+-        super(GeoDjangoTestSuiteRunner, self).setup_test_environment(**kwargs)
+-
+-        # Saving original values of INSTALLED_APPS, ROOT_URLCONF, and SITE_ID.
+-        self.old_installed = getattr(settings, 'INSTALLED_APPS', None)                ######################getattr
+-        self.old_root_urlconf = getattr(settings, 'ROOT_URLCONF', '')                   ######################getattr
+-        self.old_site_id = getattr(settings, 'SITE_ID', None)                               ######################getattr
+-
+-        # Constructing the new INSTALLED_APPS, and including applications
+-        # within the GeoDjango test namespace.
+-        new_installed =  [
+-            'django.contrib.sites',
+-            'django.contrib.sitemaps',
+-            'django.contrib.gis',
+-        ]
+-
+-        # Calling out to `geo_apps` to get GeoDjango applications supported
+-        # for testing.
+-        new_installed.extend(geo_apps())
+-        settings.INSTALLED_APPS = list(self.old_installed) + new_installed
+-
+-        # SITE_ID needs to be set
+-        settings.SITE_ID = 1
+-
+-        # ROOT_URLCONF needs to be set, else `AttributeErrors` are raised
+-        # when TestCases are torn down that have `urls` defined.
+-        settings.ROOT_URLCONF = ''
+-
+-
+-    def teardown_test_environment(self, **kwargs):
+-        super(GeoDjangoTestSuiteRunner, self).teardown_test_environment(**kwargs)
+-        settings.INSTALLED_APPS = self.old_installed
+-        settings.ROOT_URLCONF = self.old_root_urlconf
+-        settings.SITE_ID = self.old_site_id
+-
+-
+-    def build_suite(self, test_labels, extra_tests=None, **kwargs):
+-        return geodjango_suite()
++    return [('django.contrib.gis.tests', app) for app in apps]
+diff --git a/django/contrib/gis/tests/distapp/tests.py b/django/contrib/gis/tests/distapp/tests.py
+index 5574b42..2e778d3 100644
+--- a/django/contrib/gis/tests/distapp/tests.py
++++ b/django/contrib/gis/tests/distapp/tests.py
+@@ -2,24 +2,33 @@ from __future__ import absolute_import
+ 
+ from django.db import connection
+ from django.db.models import Q
+-from django.contrib.gis.geos import GEOSGeometry, LineString
++from django.contrib.gis.geos import HAS_GEOS
+ from django.contrib.gis.measure import D # alias for Distance
+-from django.contrib.gis.tests.utils import oracle, postgis, spatialite, no_oracle, no_spatialite
++from django.contrib.gis.tests.utils import (
++    HAS_SPATIAL_DB, oracle, postgis, spatialite, no_oracle, no_spatialite
++)
+ from django.test import TestCase
++from django.utils.unittest import skipUnless
+ 
+-from .models import (AustraliaCity, Interstate, SouthTexasInterstate,
+-    SouthTexasCity, SouthTexasCityFt, CensusZipcode, SouthTexasZipcode)
++if HAS_GEOS and HAS_SPATIAL_DB:
++    from django.contrib.gis.geos import GEOSGeometry, LineString
+ 
++    from .models import (AustraliaCity, Interstate, SouthTexasInterstate,
++        SouthTexasCity, SouthTexasCityFt, CensusZipcode, SouthTexasZipcode)
+ 
++
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB,
++    "Geos and spatial db are required.")
+ class DistanceTest(TestCase):
+ 
+-    # A point we are testing distances with -- using a WGS84
+-    # coordinate that'll be implicitly transormed to that to
+-    # the coordinate system of the field, EPSG:32140 (Texas South Central
+-    # w/units in meters)
+-    stx_pnt = GEOSGeometry('POINT (-95.370401017314293 29.704867409475465)', 4326)
+-    # Another one for Australia
+-    au_pnt = GEOSGeometry('POINT (150.791 -34.4919)', 4326)
++    if HAS_GEOS and HAS_SPATIAL_DB:
++        # A point we are testing distances with -- using a WGS84
++        # coordinate that'll be implicitly transormed to that to
++        # the coordinate system of the field, EPSG:32140 (Texas South Central
++        # w/units in meters)
++        stx_pnt = GEOSGeometry('POINT (-95.370401017314293 29.704867409475465)', 4326)
++        # Another one for Australia
++        au_pnt = GEOSGeometry('POINT (150.791 -34.4919)', 4326)
+ 
+     def get_names(self, qs):
+         cities = [c.name for c in qs]
+diff --git a/django/contrib/gis/tests/geo3d/tests.py b/django/contrib/gis/tests/geo3d/tests.py
+index 6b40164..c51c0de 100644
+--- a/django/contrib/gis/tests/geo3d/tests.py
++++ b/django/contrib/gis/tests/geo3d/tests.py
+@@ -3,14 +3,22 @@ from __future__ import absolute_import, unicode_literals
+ import os
+ import re
+ 
+-from django.contrib.gis.db.models import Union, Extent3D
+-from django.contrib.gis.geos import GEOSGeometry, LineString, Point, Polygon
+-from django.contrib.gis.utils import LayerMapping, LayerMapError
++from django.contrib.gis.gdal import HAS_GDAL
++from django.contrib.gis.geos import HAS_GEOS
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
+ from django.test import TestCase
+ from django.utils._os import upath
++from django.utils.unittest import skipUnless
+ 
+-from .models import (City3D, Interstate2D, Interstate3D, InterstateProj2D,
+-    InterstateProj3D, Point2D, Point3D, MultiPoint3D, Polygon2D, Polygon3D)
++if HAS_GEOS:
++    from django.contrib.gis.db.models import Union, Extent3D
++    from django.contrib.gis.geos import GEOSGeometry, LineString, Point, Polygon
++
++    from .models import (City3D, Interstate2D, Interstate3D, InterstateProj2D,
++        InterstateProj3D, Point2D, Point3D, MultiPoint3D, Polygon2D, Polygon3D)
++
++if HAS_GDAL:
++    from django.contrib.gis.utils import LayerMapping, LayerMapError
+ 
+ 
+ data_path = os.path.realpath(os.path.join(os.path.dirname(upath(__file__)), '..', 'data'))
+@@ -54,6 +62,7 @@ bbox_data = (
+ )
+ 
+ 
++@skipUnless(HAS_GEOS and HAS_GDAL and HAS_SPATIAL_DB, "Geos, GDAL and spatial db are required.")
+ class Geo3DTest(TestCase):
+     """
+     Only a subset of the PostGIS routines are 3D-enabled, and this TestCase
+diff --git a/django/contrib/gis/tests/geoadmin/tests.py b/django/contrib/gis/tests/geoadmin/tests.py
+index 669914b..99dcdf0 100644
+--- a/django/contrib/gis/tests/geoadmin/tests.py
++++ b/django/contrib/gis/tests/geoadmin/tests.py
+@@ -1,12 +1,18 @@
+ from __future__ import absolute_import
+ 
+ from django.test import TestCase
+-from django.contrib.gis import admin
+-from django.contrib.gis.geos import GEOSGeometry, Point
++from django.contrib.gis.geos import HAS_GEOS
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
++from django.utils.unittest import skipUnless
+ 
+-from .models import City
++if HAS_GEOS and HAS_SPATIAL_DB:
++    from django.contrib.gis import admin
++    from django.contrib.gis.geos import Point
+ 
++    from .models import City
+ 
++
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeoAdminTest(TestCase):
+     urls = 'django.contrib.gis.tests.geoadmin.urls'
+ 
+diff --git a/django/contrib/gis/tests/geoapp/test_feeds.py b/django/contrib/gis/tests/geoapp/test_feeds.py
+index c9cf636..778cadc 100644
+--- a/django/contrib/gis/tests/geoapp/test_feeds.py
++++ b/django/contrib/gis/tests/geoapp/test_feeds.py
+@@ -4,11 +4,16 @@ from xml.dom import minidom
+ 
+ from django.conf import settings
+ from django.contrib.sites.models import Site
++from django.contrib.gis.geos import HAS_GEOS
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
+ from django.test import TestCase
++from django.utils.unittest import skipUnless
+ 
+-from .models import City
++if HAS_GEOS:
++    from .models import City
+ 
+ 
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeoFeedTest(TestCase):
+ 
+     urls = 'django.contrib.gis.tests.geoapp.urls'
+diff --git a/django/contrib/gis/tests/geoapp/test_regress.py b/django/contrib/gis/tests/geoapp/test_regress.py
+index a27b2d4..d6f3c8d 100644
+--- a/django/contrib/gis/tests/geoapp/test_regress.py
++++ b/django/contrib/gis/tests/geoapp/test_regress.py
+@@ -3,14 +3,19 @@ from __future__ import absolute_import, unicode_literals
+ 
+ from datetime import datetime
+ 
++from django.contrib.gis.geos import HAS_GEOS
+ from django.contrib.gis.tests.utils import no_mysql, no_spatialite
+ from django.contrib.gis.shortcuts import render_to_kmz
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
+ from django.db.models import Count, Min
+ from django.test import TestCase
++from django.utils.unittest import skipUnless
+ 
+-from .models import City, PennsylvaniaCity, State, Truth
++if HAS_GEOS:
++    from .models import City, PennsylvaniaCity, State, Truth
+ 
+ 
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeoRegressionTests(TestCase):
+ 
+     def test_update(self):
+diff --git a/django/contrib/gis/tests/geoapp/test_sitemaps.py b/django/contrib/gis/tests/geoapp/test_sitemaps.py
+index aa2d970..337b4b7 100644
+--- a/django/contrib/gis/tests/geoapp/test_sitemaps.py
++++ b/django/contrib/gis/tests/geoapp/test_sitemaps.py
+@@ -5,12 +5,17 @@ from xml.dom import minidom
+ import zipfile
+ 
+ from django.conf import settings
++from django.contrib.gis.geos import HAS_GEOS
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
+ from django.contrib.sites.models import Site
+ from django.test import TestCase
++from django.utils.unittest import skipUnless
+ 
+-from .models import City, Country
++if HAS_GEOS:
++    from .models import City, Country
+ 
+ 
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeoSitemapTest(TestCase):
+ 
+     urls = 'django.contrib.gis.tests.geoapp.urls'
+diff --git a/django/contrib/gis/tests/geoapp/tests.py b/django/contrib/gis/tests/geoapp/tests.py
+index 672d78c..f6de067 100644
+--- a/django/contrib/gis/tests/geoapp/tests.py
++++ b/django/contrib/gis/tests/geoapp/tests.py
+@@ -3,26 +3,31 @@ from __future__ import absolute_import
+ import re
+ 
+ from django.db import connection
+-from django.db.utils import DatabaseError
+ from django.contrib.gis import gdal
+-from django.contrib.gis.geos import (fromstr, GEOSGeometry,
+-    Point, LineString, LinearRing, Polygon, GeometryCollection)
++from django.contrib.gis.geos import HAS_GEOS
+ from django.contrib.gis.tests.utils import (
+-    no_mysql, no_oracle, no_spatialite,
++    HAS_SPATIAL_DB, no_mysql, no_oracle, no_spatialite,
+     mysql, oracle, postgis, spatialite)
+ from django.test import TestCase
+ from django.utils import six, unittest
++from django.utils.unittest import skipUnless
+ 
+-from .models import Country, City, PennsylvaniaCity, State, Track
++if HAS_GEOS:
++    from django.contrib.gis.geos import (fromstr, GEOSGeometry,
++        Point, LineString, LinearRing, Polygon, GeometryCollection)
+ 
+-from .test_feeds import GeoFeedTest
+-from .test_regress import GeoRegressionTests
+-from .test_sitemaps import GeoSitemapTest
++    from .models import Country, City, PennsylvaniaCity, State, Track
+ 
+-
+-if not spatialite:
++if HAS_GEOS and not spatialite:
+     from .models import Feature, MinusOneSRID
+ 
++
++def postgis_bug_version():
++    spatial_version = getattr(connection.ops, "spatial_version", (0,0,0))
++    return spatial_version and (2, 0, 0) <= spatial_version <= (2, 0, 1)
++
++
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeoModelTest(TestCase):
+ 
+     def test_fixtures(self):
+@@ -197,6 +202,7 @@ class GeoModelTest(TestCase):
+         self.assertTrue(isinstance(cities2[0].point, Point))
+ 
+ 
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeoLookupTest(TestCase):
+ 
+     @no_mysql
+@@ -297,7 +303,7 @@ class GeoLookupTest(TestCase):
+ 
+     # The left/right lookup tests are known failures on PostGIS 2.0/2.0.1
+     # http://trac.osgeo.org/postgis/ticket/2035
+-    if connection.ops.postgis and (2, 0, 0) <= connection.ops.spatial_version <= (2, 0, 1):
++    if postgis_bug_version():
+         test_left_right_lookups = unittest.expectedFailure(test_left_right_lookups)
+ 
+     def test_equals_lookups(self):
+@@ -382,6 +388,7 @@ class GeoLookupTest(TestCase):
+             self.assertEqual('Lawrence', City.objects.get(point__relate=(ks.poly, intersects_mask)).name)
+ 
+ 
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeoQuerySetTest(TestCase):
+     # Please keep the tests in GeoQuerySet method's alphabetic order
+ 
+diff --git a/django/contrib/gis/tests/geogapp/tests.py b/django/contrib/gis/tests/geogapp/tests.py
+index a8c607c..8d3e96b 100644
+--- a/django/contrib/gis/tests/geogapp/tests.py
++++ b/django/contrib/gis/tests/geogapp/tests.py
+@@ -5,14 +5,19 @@ from __future__ import absolute_import
+ 
+ import os
+ 
+-from django.contrib.gis import gdal
++from django.contrib.gis.gdal import HAS_GDAL
++from django.contrib.gis.geos import HAS_GEOS
+ from django.contrib.gis.measure import D
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
+ from django.test import TestCase
+ from django.utils._os import upath
++from django.utils.unittest import skipUnless
+ 
+-from .models import City, County, Zipcode
++if HAS_GEOS:
++    from .models import City, County, Zipcode
+ 
+ 
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class GeographyTest(TestCase):
+ 
+     def test01_fixture_load(self):
+@@ -54,11 +59,11 @@ class GeographyTest(TestCase):
+         htown = City.objects.get(name='Houston')
+         self.assertRaises(ValueError, City.objects.get, point__exact=htown.point)
+ 
++    @skipUnless(HAS_GDAL, "GDAL is required.")
+     def test05_geography_layermapping(self):
+         "Testing LayerMapping support on models with geography fields."
+         # There is a similar test in `layermap` that uses the same data set,
+         # but the County model here is a bit different.
+-        if not gdal.HAS_GDAL: return
+         from django.contrib.gis.utils import LayerMapping
+ 
+         # Getting the shapefile and mapping dictionary.
+diff --git a/django/contrib/gis/tests/inspectapp/tests.py b/django/contrib/gis/tests/inspectapp/tests.py
+index d28bdf0..668b87b 100644
+--- a/django/contrib/gis/tests/inspectapp/tests.py
++++ b/django/contrib/gis/tests/inspectapp/tests.py
+@@ -4,13 +4,19 @@ import os
+ 
+ from django.db import connections
+ from django.test import TestCase
+-from django.contrib.gis.gdal import Driver
++from django.contrib.gis.gdal import HAS_GDAL
+ from django.contrib.gis.geometry.test_data import TEST_DATA
+-from django.contrib.gis.utils.ogrinspect import ogrinspect
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
++from django.utils.unittest import skipUnless
+ 
+-from .models import AllOGRFields
++if HAS_GDAL:
++    from django.contrib.gis.gdal import Driver
++    from django.contrib.gis.utils.ogrinspect import ogrinspect
+ 
++    from .models import AllOGRFields
+ 
++
++@skipUnless(HAS_GDAL and HAS_SPATIAL_DB, "GDAL and spatial db are required.")
+ class OGRInspectTest(TestCase):
+     maxDiff = 1024
+ 
+diff --git a/django/contrib/gis/tests/layermap/tests.py b/django/contrib/gis/tests/layermap/tests.py
+index 470e5be..8379311 100644
+--- a/django/contrib/gis/tests/layermap/tests.py
++++ b/django/contrib/gis/tests/layermap/tests.py
+@@ -5,19 +5,23 @@ import os
+ from copy import copy
+ from decimal import Decimal
+ 
+-from django.contrib.gis.gdal import DataSource
+-from django.contrib.gis.tests.utils import mysql
+-from django.contrib.gis.utils.layermapping import (LayerMapping, LayerMapError,
+-    InvalidDecimal, MissingForeignKey)
++from django.contrib.gis.gdal import HAS_GDAL
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB, mysql
+ from django.db import router
+ from django.conf import settings
+ from django.test import TestCase
+ from django.utils import unittest
++from django.utils.unittest import skipUnless
+ from django.utils._os import upath
+ 
+-from .models import (
+-    City, County, CountyFeat, Interstate, ICity1, ICity2, Invalid, State,
+-    city_mapping, co_mapping, cofeat_mapping, inter_mapping)
++if HAS_GDAL:
++    from django.contrib.gis.utils.layermapping import (LayerMapping,
++        LayerMapError, InvalidDecimal, MissingForeignKey)
++    from django.contrib.gis.gdal import DataSource
++
++    from .models import (
++        City, County, CountyFeat, Interstate, ICity1, ICity2, Invalid, State,
++        city_mapping, co_mapping, cofeat_mapping, inter_mapping)
+ 
+ 
+ shp_path = os.path.realpath(os.path.join(os.path.dirname(upath(__file__)), os.pardir, 'data'))
+@@ -32,6 +36,7 @@ NUMS   = [1, 2, 1, 19, 1] # Number of polygons for each.
+ STATES = ['Texas', 'Texas', 'Texas', 'Hawaii', 'Colorado']
+ 
+ 
++@skipUnless(HAS_GDAL and HAS_SPATIAL_DB, "GDAL and spatial db are required.")
+ class LayerMapTest(TestCase):
+ 
+     def test_init(self):
+@@ -310,6 +315,7 @@ class OtherRouter(object):
+         return True
+ 
+ 
++@skipUnless(HAS_GDAL and HAS_SPATIAL_DB, "GDAL and spatial db are required.")
+ class LayerMapRouterTest(TestCase):
+ 
+     def setUp(self):
+diff --git a/django/contrib/gis/tests/relatedapp/tests.py b/django/contrib/gis/tests/relatedapp/tests.py
+index 93a8ff4..6320edc 100644
+--- a/django/contrib/gis/tests/relatedapp/tests.py
++++ b/django/contrib/gis/tests/relatedapp/tests.py
+@@ -2,15 +2,20 @@ from __future__ import absolute_import
+ 
+ from datetime import date
+ 
+-from django.contrib.gis.geos import GEOSGeometry, Point, MultiPoint
+-from django.contrib.gis.db.models import Collect, Count, Extent, F, Union
+-from django.contrib.gis.geometry.backend import Geometry
+-from django.contrib.gis.tests.utils import mysql, oracle, no_mysql, no_oracle, no_spatialite
++from django.contrib.gis.geos import HAS_GEOS
++from django.contrib.gis.tests.utils import HAS_SPATIAL_DB, mysql, oracle, no_mysql, no_oracle, no_spatialite
+ from django.test import TestCase
++from django.utils.unittest import skipUnless
+ 
+-from .models import City, Location, DirectoryEntry, Parcel, Book, Author, Article
++if HAS_GEOS:
++    from django.contrib.gis.db.models import Collect, Count, Extent, F, Union
++    from django.contrib.gis.geometry.backend import Geometry
++    from django.contrib.gis.geos import GEOSGeometry, Point, MultiPoint
+ 
++    from .models import City, Location, DirectoryEntry, Parcel, Book, Author, Article
+ 
++
++@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
+ class RelatedGeoModelTest(TestCase):
+ 
+     def test02_select_related(self):
+diff --git a/django/contrib/gis/tests/test_spatialrefsys.py b/django/contrib/gis/tests/test_spatialrefsys.py
+index 257e06a..f33883e 100644
+--- a/django/contrib/gis/tests/test_spatialrefsys.py
++++ b/django/contrib/gis/tests/test_spatialrefsys.py
+@@ -1,4 +1,3 @@
+-from django.db import connection
+ from django.contrib.gis.gdal import HAS_GDAL
+ from django.contrib.gis.tests.utils import (no_mysql, oracle, postgis,
+     spatialite, HAS_SPATIALREFSYS, SpatialRefSys)
+diff --git a/django/contrib/gis/tests/utils.py b/django/contrib/gis/tests/utils.py
+index 8355b27..a09a3ab 100644
+--- a/django/contrib/gis/tests/utils.py
++++ b/django/contrib/gis/tests/utils.py
+@@ -35,3 +35,12 @@ elif spatialite:
+ else:
+     HAS_SPATIALREFSYS = False
+     SpatialRefSys = None
++
++
++def has_spatial_db():
++    # All databases must have spatial backends to run GeoDjango tests.
++    spatial_dbs = [name for name, db_dict in settings.DATABASES.items()
++        if db_dict['ENGINE'].startswith('django.contrib.gis')]
++    return len(spatial_dbs) == len(settings.DATABASES)
++
++HAS_SPATIAL_DB = has_spatial_db()
+diff --git a/django/contrib/messages/tests/__init__.py b/django/contrib/messages/tests/__init__.py
+index e57594d..e69de29 100644
+--- a/django/contrib/messages/tests/__init__.py
++++ b/django/contrib/messages/tests/__init__.py
+@@ -1,5 +0,0 @@
+-from django.contrib.messages.tests.test_cookie import CookieTest
+-from django.contrib.messages.tests.test_fallback import FallbackTest
+-from django.contrib.messages.tests.test_middleware import MiddlewareTest
+-from django.contrib.messages.tests.test_session import SessionTest
+-from django.contrib.messages.tests.test_mixins import SuccessMessageMixinTests
+diff --git a/django/contrib/sitemaps/tests/__init__.py b/django/contrib/sitemaps/tests/__init__.py
+index fdbb969..e69de29 100644
+--- a/django/contrib/sitemaps/tests/__init__.py
++++ b/django/contrib/sitemaps/tests/__init__.py
+@@ -1,4 +0,0 @@
+-from .test_flatpages import FlatpagesSitemapTests
+-from .test_generic import GenericViewsSitemapTests
+-from .test_http import HTTPSitemapTests
+-from .test_https import HTTPSSitemapTests, HTTPSDetectionSitemapTests
+diff --git a/django/test/_doctest.py b/django/test/_doctest.py
+index 9b8ddc9..5381cff 100644
+--- a/django/test/_doctest.py
++++ b/django/test/_doctest.py
+@@ -49,6 +49,13 @@ files containing doctests.  There are also many ways to override parts
+ of doctest's default behaviors.  See the Library Reference Manual for
+ details.
+ """
++import warnings
++
++warnings.warn(
++    "The django.test._doctest module is deprecated; "
++    "use the doctest module from the Python standard library instead.",
++    PendingDeprecationWarning)
++
+ 
+ __docformat__ = 'reStructuredText en'
+ 
+diff --git a/django/test/runner.py b/django/test/runner.py
+new file mode 100644
+index 0000000..e753e36
+--- /dev/null
++++ b/django/test/runner.py
+@@ -0,0 +1,289 @@
++import os
++from optparse import make_option
++
++from django.conf import settings
++from django.core.exceptions import ImproperlyConfigured
++from django.test import TestCase
++from django.test.utils import setup_test_environment, teardown_test_environment
++from django.utils import unittest
++from django.utils.unittest import TestSuite, defaultTestLoader
++
++
++class DiscoverRunner(object):
++    """
++    A Django test runner that uses unittest2 test discovery.
++    """
++
++    test_loader = defaultTestLoader
++    reorder_by = (TestCase, )
++    option_list = (
++        make_option('-t', '--top-level-directory',
++            action='store', dest='top_level', default=None,
++            help='Top level of project for unittest discovery.'),
++        make_option('-p', '--pattern', action='store', dest='pattern',
++            default="test*.py",
++            help='The test matching pattern. Defaults to test*.py.'),
++        )
++
++    def __init__(self, pattern=None, top_level=None,
++                 verbosity=1, interactive=True, failfast=False,
++                 **kwargs):
++
++        self.pattern = pattern
++        self.top_level = top_level
++
++        self.verbosity = verbosity
++        self.interactive = interactive
++        self.failfast = failfast
++
++    def setup_test_environment(self, **kwargs):
++        setup_test_environment()
++        settings.DEBUG = False
++        unittest.installHandler()
++
++    def build_suite(self, test_labels=None, extra_tests=None, **kwargs):
++        suite = TestSuite()
++        test_labels = test_labels or ['.']
++        extra_tests = extra_tests or []
++
++        discover_kwargs = {}
++        if self.pattern is not None:
++            discover_kwargs['pattern'] = self.pattern
++        if self.top_level is not None:
++            discover_kwargs['top_level_dir'] = self.top_level
++
++        for label in test_labels:
++            kwargs = discover_kwargs.copy()
++            tests = None
++
++            label_as_path = os.path.abspath(label)
++
++            # if a module, or "module.ClassName[.method_name]", just run those
++            if not os.path.exists(label_as_path):
++                tests = self.test_loader.loadTestsFromName(label)
++            elif os.path.isdir(label_as_path) and not self.top_level:
++                # Try to be a bit smarter than unittest about finding the
++                # default top-level for a given directory path, to avoid
++                # breaking relative imports. (Unittest's default is to set
++                # top-level equal to the path, which means relative imports
++                # will result in "Attempted relative import in non-package.").
++
++                # We'd be happy to skip this and require dotted module paths
++                # (which don't cause this problem) instead of file paths (which
++                # do), but in the case of a directory in the cwd, which would
++                # be equally valid if considered as a top-level module or as a
++                # directory path, unittest unfortunately prefers the latter.
++
++                top_level = label_as_path
++                while True:
++                    init_py = os.path.join(top_level, '__init__.py')
++                    if os.path.exists(init_py):
++                        try_next = os.path.dirname(top_level)
++                        if try_next == top_level:
++                            # __init__.py all the way down? give up.
++                            break
++                        top_level = try_next
++                        continue
++                    break
++                kwargs['top_level_dir'] = top_level
++
++
++            if not (tests and tests.countTestCases()):
++                # if no tests found, it's probably a package; try discovery
++                tests = self.test_loader.discover(start_dir=label, **kwargs)
++
++                # make unittest forget the top-level dir it calculated from this
++                # run, to support running tests from two different top-levels.
++                self.test_loader._top_level_dir = None
++
++            suite.addTests(tests)
++
++        for test in extra_tests:
++            suite.addTest(test)
++
++        return reorder_suite(suite, self.reorder_by)
++
++    def setup_databases(self, **kwargs):
++        return setup_databases(self.verbosity, self.interactive, **kwargs)
++
++    def run_suite(self, suite, **kwargs):
++        return unittest.TextTestRunner(
++            verbosity=self.verbosity,
++            failfast=self.failfast,
++        ).run(suite)
++
++    def teardown_databases(self, old_config, **kwargs):
++        """
++        Destroys all the non-mirror databases.
++        """
++        old_names, mirrors = old_config
++        for connection, old_name, destroy in old_names:
++            if destroy:
++                connection.creation.destroy_test_db(old_name, self.verbosity)
++
++    def teardown_test_environment(self, **kwargs):
++        unittest.removeHandler()
++        teardown_test_environment()
++
++    def suite_result(self, suite, result, **kwargs):
++        return len(result.failures) + len(result.errors)
++
++    def run_tests(self, test_labels, extra_tests=None, **kwargs):
++        """
++        Run the unit tests for all the test labels in the provided list.
++
++        Test labels should be dotted Python paths to test modules, test
++        classes, or test methods.
++
++        A list of 'extra' tests may also be provided; these tests
++        will be added to the test suite.
++
++        Returns the number of tests that failed.
++        """
++        self.setup_test_environment()
++        suite = self.build_suite(test_labels, extra_tests)
++        old_config = self.setup_databases()
++        result = self.run_suite(suite)
++        self.teardown_databases(old_config)
++        self.teardown_test_environment()
++        return self.suite_result(suite, result)
++
++
++def dependency_ordered(test_databases, dependencies):
++    """
++    Reorder test_databases into an order that honors the dependencies
++    described in TEST_DEPENDENCIES.
++    """
++    ordered_test_databases = []
++    resolved_databases = set()
++
++    # Maps db signature to dependencies of all it's aliases
++    dependencies_map = {}
++
++    # sanity check - no DB can depend on it's own alias
++    for sig, (_, aliases) in test_databases:
++        all_deps = set()
++        for alias in aliases:
++            all_deps.update(dependencies.get(alias, []))
++        if not all_deps.isdisjoint(aliases):
++            raise ImproperlyConfigured(
++                "Circular dependency: databases %r depend on each other, "
++                "but are aliases." % aliases)
++        dependencies_map[sig] = all_deps
++
++    while test_databases:
++        changed = False
++        deferred = []
++
++        # Try to find a DB that has all it's dependencies met
++        for signature, (db_name, aliases) in test_databases:
++            if dependencies_map[signature].issubset(resolved_databases):
++                resolved_databases.update(aliases)
++                ordered_test_databases.append((signature, (db_name, aliases)))
++                changed = True
++            else:
++                deferred.append((signature, (db_name, aliases)))
++
++        if not changed:
++            raise ImproperlyConfigured(
++                "Circular dependency in TEST_DEPENDENCIES")
++        test_databases = deferred
++    return ordered_test_databases
++
++
++def reorder_suite(suite, classes):
++    """
++    Reorders a test suite by test type.
++
++    `classes` is a sequence of types
++
++    All tests of type classes[0] are placed first, then tests of type
++    classes[1], etc. Tests with no match in classes are placed last.
++    """
++    class_count = len(classes)
++    bins = [unittest.TestSuite() for i in range(class_count+1)]
++    partition_suite(suite, classes, bins)
++    for i in range(class_count):
++        bins[0].addTests(bins[i+1])
++    return bins[0]
++
++
++def partition_suite(suite, classes, bins):
++    """
++    Partitions a test suite by test type.
++
++    classes is a sequence of types
++    bins is a sequence of TestSuites, one more than classes
++
++    Tests of type classes[i] are added to bins[i],
++    tests with no match found in classes are place in bins[-1]
++    """
++    for test in suite:
++        if isinstance(test, unittest.TestSuite):        ######################isinstance                   
++            partition_suite(test, classes, bins)
++        else:
++            for i in range(len(classes)):
++                if isinstance(test, classes[i]):           ######################isinstance
++                    bins[i].addTest(test)
++                    break
++            else:
++                bins[-1].addTest(test)
++
++
++def setup_databases(verbosity, interactive, **kwargs):
++    from django.db import connections, DEFAULT_DB_ALIAS
++
++    # First pass -- work out which databases actually need to be created,
++    # and which ones are test mirrors or duplicate entries in DATABASES
++    mirrored_aliases = {}
++    test_databases = {}
++    dependencies = {}
++    for alias in connections:
++        connection = connections[alias]
++        if connection.settings_dict['TEST_MIRROR']:
++            # If the database is marked as a test mirror, save
++            # the alias.
++            mirrored_aliases[alias] = (
++                connection.settings_dict['TEST_MIRROR'])
++        else:
++            # Store a tuple with DB parameters that uniquely identify it.
++            # If we have two aliases with the same values for that tuple,
++            # we only need to create the test database once.
++            item = test_databases.setdefault(
++                connection.creation.test_db_signature(),
++                (connection.settings_dict['NAME'], set())
++            )
++            item[1].add(alias)
++
++            if 'TEST_DEPENDENCIES' in connection.settings_dict:
++                dependencies[alias] = (
++                    connection.settings_dict['TEST_DEPENDENCIES'])
++            else:
++                if alias != DEFAULT_DB_ALIAS:
++                    dependencies[alias] = connection.settings_dict.get(
++                        'TEST_DEPENDENCIES', [DEFAULT_DB_ALIAS])
++
++    # Second pass -- actually create the databases.
++    old_names = []
++    mirrors = []
++
++    for signature, (db_name, aliases) in dependency_ordered(
++        test_databases.items(), dependencies):
++        test_db_name = None
++        # Actually create the database for the first connection
++
++        for alias in aliases:
++            connection = connections[alias]
++            old_names.append((connection, db_name, True))
++            if test_db_name is None:
++                test_db_name = connection.creation.create_test_db(
++                        verbosity, autoclobber=not interactive)
++            else:
++                connection.settings_dict['NAME'] = test_db_name
++
++    for alias, mirror_alias in mirrored_aliases.items():
++        mirrors.append((alias, connections[alias].settings_dict['NAME']))
++        connections[alias].settings_dict['NAME'] = (
++            connections[mirror_alias].settings_dict['NAME'])
++
++    return old_names, mirrors
+diff --git a/django/test/simple.py b/django/test/simple.py
+index 6804b49..5117c64 100644
+--- a/django/test/simple.py
++++ b/django/test/simple.py
+@@ -1,10 +1,15 @@
++"""
++This module is pending deprecation as of Django 1.6 and will be removed in
++version 1.8.
++
++"""
++
+ import unittest as real_unittest
++import warnings
+ 
+-from django.conf import settings
+-from django.core.exceptions import ImproperlyConfigured
+ from django.db.models import get_app, get_apps
+ from django.test import _doctest as doctest
+-from django.test.utils import setup_test_environment, teardown_test_environment
++from django.test import runner
+ from django.test.testcases import OutputChecker, DocTestRunner
+ from django.utils import unittest
+ from django.utils.importlib import import_module
+@@ -12,6 +17,11 @@ from django.utils.module_loading import module_has_submodule
+ 
+ __all__ = ('DjangoTestSuiteRunner',)
+ 
++warnings.warn(
++    "The django.test.simple module and DjangoTestSuiteRunner are deprecated; "
++    "use django.test.runner.DiscoverRunner instead.",
++    PendingDeprecationWarning)
++
+ # The module name for tests outside models.py
+ TEST_MODULE = 'tests'
+ 
+@@ -154,97 +164,7 @@ def build_test(label):
+     return unittest.TestSuite(tests)
+ 
+ 
+-def partition_suite(suite, classes, bins):
+-    """
+-    Partitions a test suite by test type.
+-
+-    classes is a sequence of types
+-    bins is a sequence of TestSuites, one more than classes
+-
+-    Tests of type classes[i] are added to bins[i],
+-    tests with no match found in classes are place in bins[-1]
+-    """
+-    for test in suite:
+-        if isinstance(test, unittest.TestSuite):             ##############################isinstance
+-            partition_suite(test, classes, bins)
+-        else:
+-            for i in range(len(classes)):
+-                if isinstance(test, classes[i]):               ##############################isinstance
+-                    bins[i].addTest(test)
+-                    break
+-            else:
+-                bins[-1].addTest(test)
+-
+-
+-def reorder_suite(suite, classes):
+-    """
+-    Reorders a test suite by test type.
+-
+-    `classes` is a sequence of types
+-
+-    All tests of type classes[0] are placed first, then tests of type
+-    classes[1], etc. Tests with no match in classes are placed last.
+-    """
+-    class_count = len(classes)
+-    bins = [unittest.TestSuite() for i in range(class_count+1)]
+-    partition_suite(suite, classes, bins)
+-    for i in range(class_count):
+-        bins[0].addTests(bins[i+1])
+-    return bins[0]
+-
+-
+-def dependency_ordered(test_databases, dependencies):
+-    """
+-    Reorder test_databases into an order that honors the dependencies
+-    described in TEST_DEPENDENCIES.
+-    """
+-    ordered_test_databases = []
+-    resolved_databases = set()
+-
+-    # Maps db signature to dependencies of all it's aliases
+-    dependencies_map = {}
+-
+-    # sanity check - no DB can depend on it's own alias
+-    for sig, (_, aliases) in test_databases:
+-        all_deps = set()
+-        for alias in aliases:
+-            all_deps.update(dependencies.get(alias, []))
+-        if not all_deps.isdisjoint(aliases):
+-            raise ImproperlyConfigured(
+-                "Circular dependency: databases %r depend on each other, "
+-                "but are aliases." % aliases)
+-        dependencies_map[sig] = all_deps
+-
+-    while test_databases:
+-        changed = False
+-        deferred = []
+-
+-        # Try to find a DB that has all it's dependencies met
+-        for signature, (db_name, aliases) in test_databases:
+-            if dependencies_map[signature].issubset(resolved_databases):
+-                resolved_databases.update(aliases)
+-                ordered_test_databases.append((signature, (db_name, aliases)))
+-                changed = True
+-            else:
+-                deferred.append((signature, (db_name, aliases)))
+-
+-        if not changed:
+-            raise ImproperlyConfigured(
+-                "Circular dependency in TEST_DEPENDENCIES")
+-        test_databases = deferred
+-    return ordered_test_databases
+-
+-
+-class DjangoTestSuiteRunner(object):
+-    def __init__(self, verbosity=1, interactive=True, failfast=True, **kwargs):
+-        self.verbosity = verbosity
+-        self.interactive = interactive
+-        self.failfast = failfast
+-
+-    def setup_test_environment(self, **kwargs):
+-        setup_test_environment()
+-        settings.DEBUG = False
+-        unittest.installHandler()
++class DjangoTestSuiteRunner(runner.DiscoverRunner):
+ 
+     def build_suite(self, test_labels, extra_tests=None, **kwargs):
+         suite = unittest.TestSuite()
+@@ -264,109 +184,4 @@ class DjangoTestSuiteRunner(object):
+             for test in extra_tests:
+                 suite.addTest(test)
+ 
+-        return reorder_suite(suite, (unittest.TestCase,))
+-
+-    def setup_databases(self, **kwargs):
+-        from django.db import connections, DEFAULT_DB_ALIAS
+-
+-        # First pass -- work out which databases actually need to be created,
+-        # and which ones are test mirrors or duplicate entries in DATABASES
+-        mirrored_aliases = {}
+-        test_databases = {}
+-        dependencies = {}
+-        for alias in connections:
+-            connection = connections[alias]
+-            if connection.settings_dict['TEST_MIRROR']:
+-                # If the database is marked as a test mirror, save
+-                # the alias.
+-                mirrored_aliases[alias] = (
+-                    connection.settings_dict['TEST_MIRROR'])
+-            else:
+-                # Store a tuple with DB parameters that uniquely identify it.
+-                # If we have two aliases with the same values for that tuple,
+-                # we only need to create the test database once.
+-                item = test_databases.setdefault(
+-                    connection.creation.test_db_signature(),
+-                    (connection.settings_dict['NAME'], set())
+-                )
+-                item[1].add(alias)
+-
+-                if 'TEST_DEPENDENCIES' in connection.settings_dict:
+-                    dependencies[alias] = (
+-                        connection.settings_dict['TEST_DEPENDENCIES'])
+-                else:
+-                    if alias != DEFAULT_DB_ALIAS:
+-                        dependencies[alias] = connection.settings_dict.get(
+-                            'TEST_DEPENDENCIES', [DEFAULT_DB_ALIAS])
+-
+-        # Second pass -- actually create the databases.
+-        old_names = []
+-        mirrors = []
+-
+-        for signature, (db_name, aliases) in dependency_ordered(
+-            test_databases.items(), dependencies):
+-            test_db_name = None
+-            # Actually create the database for the first connection
+-
+-            for alias in aliases:
+-                connection = connections[alias]
+-                old_names.append((connection, db_name, True))
+-                if test_db_name is None:
+-                    test_db_name = connection.creation.create_test_db(
+-                            self.verbosity, autoclobber=not self.interactive)
+-                else:
+-                    connection.settings_dict['NAME'] = test_db_name
+-
+-        for alias, mirror_alias in mirrored_aliases.items():
+-            mirrors.append((alias, connections[alias].settings_dict['NAME']))
+-            connections[alias].settings_dict['NAME'] = (
+-                connections[mirror_alias].settings_dict['NAME'])
+-
+-        return old_names, mirrors
+-
+-    def run_suite(self, suite, **kwargs):
+-        return unittest.TextTestRunner(
+-            verbosity=self.verbosity, failfast=self.failfast).run(suite)
+-
+-    def teardown_databases(self, old_config, **kwargs):
+-        """
+-        Destroys all the non-mirror databases.
+-        """
+-        old_names, mirrors = old_config
+-        for connection, old_name, destroy in old_names:
+-            if destroy:
+-                connection.creation.destroy_test_db(old_name, self.verbosity)
+-
+-    def teardown_test_environment(self, **kwargs):
+-        unittest.removeHandler()
+-        teardown_test_environment()
+-
+-    def suite_result(self, suite, result, **kwargs):
+-        return len(result.failures) + len(result.errors)
+-
+-    def run_tests(self, test_labels, extra_tests=None, **kwargs):
+-        """
+-        Run the unit tests for all the test labels in the provided list.
+-        Labels must be of the form:
+-         - app.TestClass.test_method
+-            Run a single specific test method
+-         - app.TestClass
+-            Run all the test methods in a given class
+-         - app
+-            Search for doctests and unittests in the named application.
+-
+-        When looking for tests, the test runner will look in the models and
+-        tests modules for the application.
+-
+-        A list of 'extra' tests may also be provided; these tests
+-        will be added to the test suite.
+-
+-        Returns the number of tests that failed.
+-        """
+-        self.setup_test_environment()
+-        suite = self.build_suite(test_labels, extra_tests)
+-        old_config = self.setup_databases()
+-        result = self.run_suite(suite)
+-        self.teardown_databases(old_config)
+-        self.teardown_test_environment()
+-        return self.suite_result(suite, result)
++        return runner.reorder_suite(suite, (unittest.TestCase,))
+diff --git a/django/test/testcases.py b/django/test/testcases.py
+index a9fcc2b..6fe6b9c 100644
+--- a/django/test/testcases.py
++++ b/django/test/testcases.py
+@@ -97,6 +97,12 @@ def assert_and_parse_html(self, html, user_msg, msg):
+ 
+ 
+ class OutputChecker(doctest.OutputChecker):
++    def __init__(self):
++        warnings.warn(
++            "The django.test.testcases.OutputChecker class is deprecated; "
++            "use the doctest module from the Python standard library instead.",
++            PendingDeprecationWarning)
++
+     def check_output(self, want, got, optionflags):
+         """
+         The entry method for doctest output checking. Defers to a sequence of
+@@ -151,6 +157,10 @@ class OutputChecker(doctest.OutputChecker):
+ 
+ class DocTestRunner(doctest.DocTestRunner):
+     def __init__(self, *args, **kwargs):
++        warnings.warn(
++            "The django.test.testcases.DocTestRunner class is deprecated; "
++            "use the doctest module from the Python standard library instead.",
++            PendingDeprecationWarning)
+         doctest.DocTestRunner.__init__(self, *args, **kwargs)
+         self.optionflags = doctest.ELLIPSIS
+ 
+diff --git a/django/utils/unittest/loader.py b/django/utils/unittest/loader.py
+index 0bdd106..695bac4 100644
+--- a/django/utils/unittest/loader.py
++++ b/django/utils/unittest/loader.py
+@@ -125,7 +125,7 @@ class TestLoader(unittest.TestLoader):
+             return self.loadTestsFromTestCase(obj)
+         elif (isinstance(obj, types.UnboundMethodType) and
+               isinstance(parent, type) and
+-              issubclass(parent, case.TestCase)):              ########################issubclass
++              issubclass(parent, unittest.TestCase)):          ########################issubclass
+             return self.suiteClass([parent(obj.__name__)])
+         elif isinstance(obj, unittest.TestSuite):
+             return obj
+diff --git a/docs/index.txt b/docs/index.txt
+index 6473aa3..3b5e74f 100644
+--- a/docs/index.txt
++++ b/docs/index.txt
+@@ -186,7 +186,6 @@ testing of Django applications:
+   :doc:`Introduction <topics/testing/index>` |
+   :doc:`Writing and running tests <topics/testing/overview>` |
+   :doc:`Advanced topics <topics/testing/advanced>` |
+-  :doc:`Doctests <topics/testing/doctests>`
+ 
+ * **Deployment:**
+   :doc:`Overview <howto/deployment/index>` |
+diff --git a/docs/internals/deprecation.txt b/docs/internals/deprecation.txt
+index 1533e25..862907b 100644
+--- a/docs/internals/deprecation.txt
++++ b/docs/internals/deprecation.txt
+@@ -73,7 +73,7 @@ these changes.
+   ``django.utils.formats.get_format()`` to get the appropriate
+   formats.
+ 
+-* The ability to use a function-based test runners will be removed,
++* The ability to use a function-based test runner will be removed,
+   along with the ``django.test.simple.run_tests()`` test runner.
+ 
+ * The ``views.feed()`` view and ``feeds.Feed`` class in
+@@ -375,6 +375,15 @@ these changes.
+ * ``django.forms.widgets.RadioInput`` will be removed in favor of
+   ``django.forms.widgets.RadioChoiceInput``.
+ 
++* The module ``django.test.simple`` and the class
++  ``django.test.simple.DjangoTestSuiteRunner`` will be removed. Instead use
++  ``django.test.runner.DiscoverRunner``.
++
++* The module ``django.test._doctest`` and the classes
++  ``django.test.testcases.DocTestRunner`` and
++  ``django.test.testcases.OutputChecker`` will be removed. Instead use the
++  doctest module from the Python standard library.
++
+ 2.0
+ ---
+ 
+diff --git a/docs/intro/tutorial05.txt b/docs/intro/tutorial05.txt
+index 97d1d96..67a40ab 100644
+--- a/docs/intro/tutorial05.txt
++++ b/docs/intro/tutorial05.txt
+@@ -156,8 +156,9 @@ Create a test to expose the bug
+ What we've just done in the shell to test for the problem is exactly what we
+ can do in an automated test, so let's turn that into an automated test.
+ 
+-The best place for an application's tests is in the application's ``tests.py``
+-file - the testing system will look there for tests automatically.
++A conventional place for an application's tests is in the application's
++``tests.py`` file; the testing system will automatically find tests in any file
++whose name begins with ``test``.
+ 
+ Put the following in the ``tests.py`` file in the ``polls`` application::
+ 
+diff --git a/docs/ref/contrib/gis/testing.txt b/docs/ref/contrib/gis/testing.txt
+index 2a6dcef..fca6675 100644
+--- a/docs/ref/contrib/gis/testing.txt
++++ b/docs/ref/contrib/gis/testing.txt
+@@ -134,57 +134,14 @@ your settings::
+ GeoDjango tests
+ ===============
+ 
+-GeoDjango's test suite may be run in one of two ways, either by itself or
+-with the rest of :ref:`Django's unit tests <running-unit-tests>`.
++To have the GeoDjango tests executed when :ref:`running the Django test suite
++<running-unit-tests>` with ``runtests.py`` all of the databases in the settings
++file must be using one of the :ref:`spatial database backends
++<spatial-backends>`.
+ 
+-Run only GeoDjango tests
+-------------------------
+-
+-.. class:: django.contrib.gis.tests.GeoDjangoTestSuiteRunner
+-
+-To run *only* the tests for GeoDjango, the :setting:`TEST_RUNNER`
+-setting must be changed to use the
+-:class:`~django.contrib.gis.tests.GeoDjangoTestSuiteRunner`::
+-
+-    TEST_RUNNER = 'django.contrib.gis.tests.GeoDjangoTestSuiteRunner'
+ 
+ Example
+-^^^^^^^
+-
+-First, you'll need a bare-bones settings file, like below, that is
+-customized with your spatial database name and user::
+-
+-    TEST_RUNNER = 'django.contrib.gis.tests.GeoDjangoTestSuiteRunner'
+-
+-    DATABASES = {
+-        'default': {
+-            'ENGINE': 'django.contrib.gis.db.backends.postgis',
+-            'NAME': 'a_spatial_database',
+-            'USER': 'db_user'
+-        }
+-    }
+-
+-Assuming the above is in a file called ``postgis.py`` that is in the
+-the same directory as ``manage.py`` of your Django project, then
+-you may run the tests with the following command::
+-
+-    $ python manage.py test --settings=postgis
+-
+-Run with ``runtests.py``
+-------------------------
+-
+-To have the GeoDjango tests executed when
+-:ref:`running the Django test suite <running-unit-tests>` with ``runtests.py``
+-all of the databases in the settings file must be using one of the
+-:ref:`spatial database backends <spatial-backends>`.
+-
+-.. warning::
+-
+-    Do not change the :setting:`TEST_RUNNER` setting
+-    when running the GeoDjango tests with ``runtests.py``.
+-
+-Example
+-^^^^^^^
++-------
+ 
+ The following is an example bare-bones settings file with spatial backends
+ that can be used to run the entire Django test suite, including those
+@@ -208,3 +165,7 @@ directory as ``runtests.py``, then all Django and GeoDjango tests would
+ be performed when executing the command::
+ 
+     $ ./runtests.py --settings=postgis
++
++To run only the GeoDjango test suite, specify ``django.contrib.gis``::
++
++    $ ./runtests.py --settings=postgis django.contrib.gis
+diff --git a/docs/ref/settings.txt b/docs/ref/settings.txt
+index 04b42ae..eb470cd 100644
+--- a/docs/ref/settings.txt
++++ b/docs/ref/settings.txt
+@@ -1725,11 +1725,16 @@ misspelled) variables. See :ref:`invalid-template-variables`..
+ TEST_RUNNER
+ -----------
+ 
+-Default: ``'django.test.simple.DjangoTestSuiteRunner'``
++Default: ``'django.test.runner.DiscoverRunner'``
+ 
+ The name of the class to use for starting the test suite. See
+ :ref:`other-testing-frameworks`.
+ 
++.. versionchanged:: 1.6
++
++    Previously the default ``TEST_RUNNER`` was
++    ``django.test.simple.DjangoTestSuiteRunner``.
++
+ .. setting:: THOUSAND_SEPARATOR
+ 
+ THOUSAND_SEPARATOR
+diff --git a/docs/releases/1.2.4.txt b/docs/releases/1.2.4.txt
+index b74ea9a..ae15ea6 100644
+--- a/docs/releases/1.2.4.txt
++++ b/docs/releases/1.2.4.txt
+@@ -78,7 +78,7 @@ GeoDjango
+ The function-based :setting:`TEST_RUNNER` previously used to execute
+ the GeoDjango test suite, ``django.contrib.gis.tests.run_gis_tests``,
+ was finally deprecated in favor of a class-based test runner,
+-:class:`django.contrib.gis.tests.GeoDjangoTestSuiteRunner`, added in this
++``django.contrib.gis.tests.GeoDjangoTestSuiteRunner``, added in this
+ release.
+ 
+ In addition, the GeoDjango test suite is now included when
+diff --git a/docs/releases/1.3.txt b/docs/releases/1.3.txt
+index 9a41f90..89cece9 100644
+--- a/docs/releases/1.3.txt
++++ b/docs/releases/1.3.txt
+@@ -799,7 +799,7 @@ GeoDjango
+ * The function-based :setting:`TEST_RUNNER` previously used to execute
+   the GeoDjango test suite, ``django.contrib.gis.tests.run_gis_tests``, was
+   deprecated for the class-based runner,
+-  :class:`django.contrib.gis.tests.GeoDjangoTestSuiteRunner`.
++  ``django.contrib.gis.tests.GeoDjangoTestSuiteRunner``.
+ 
+ * Previously, calling
+   :meth:`~django.contrib.gis.geos.GEOSGeometry.transform` would
+diff --git a/docs/releases/1.6.txt b/docs/releases/1.6.txt
+index 9cce36a..5780229 100644
+--- a/docs/releases/1.6.txt
++++ b/docs/releases/1.6.txt
+@@ -69,6 +69,29 @@ This avoids the overhead of re-establishing a connection at the beginning of
+ each request. For backwards compatibility, this feature is disabled by
+ default. See :ref:`persistent-database-connections` for details.
+ 
++Discovery of tests in any test module
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++Django 1.6 ships with a new test runner that allows more flexibility in the
++location of tests. The previous runner
++(``django.test.simple.DjangoTestSuiteRunner``) found tests only in the
++``models.py`` and ``tests.py`` modules of a Python package in
++:setting:`INSTALLED_APPS`.
++
++The new runner (``django.test.runner.DjangoTestDiscoverRunner``) uses the test
++discovery features built into unittest2 (the version of unittest in the Python
++2.7+ standard library, and bundled with Django). With test discovery, tests can
++be located in any module whose name matches the pattern ``test*.py``.
++
++In addition, the test labels provided to ``./manage.py test`` to nominate
++specific tests to run must now be full Python dotted paths (or directory
++paths), rather than ``applabel.TestCase.test_method_name`` pseudo-paths. This
++allows running tests located anywhere in your codebase, rather than only in
++:setting:`INSTALLED_APPS`. For more details, see :doc:`/topics/testing/index`.
++
++This change is backwards-incompatible; see the :ref:`backwards-incompatibility
++notes<new-test-runner>`.
++
+ Time zone aware aggregation
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+@@ -238,6 +261,40 @@ In previous versions, database-level autocommit was only an option for
+ PostgreSQL, and it was disabled by default. This option is now :ref:`ignored
+ <postgresql-autocommit-mode>` and can be removed.
+ 
++.. _new-test-runner:
++
++New test runner
++~~~~~~~~~~~~~~~
++
++In order to maintain greater consistency with Python's unittest module, the new
++test runner (``django.test.runner.DiscoverRunner``) does not automatically
++support some types of tests that were supported by the previous runner:
++
++* Tests in ``models.py`` and ``tests/__init__.py`` files will no longer be
++  found and run. Move them to a file whose name begins with ``test``.
++
++* Doctests will no longer be automatically discovered. To integrate doctests in
++  your test suite, follow the `recommendations in the Python documentation`_.
++
++Django bundles a modified version of the :mod:`doctest` module from the Python
++standard library (in ``django.test._doctest``) in order to allow passing in a
++custom ``DocTestRunner`` when instantiating a ``DocTestSuite``, and includes
++some additional doctest utilities (``django.test.testcases.DocTestRunner``
++turns on the ``ELLIPSIS`` option by default, and
++``django.test.testcases.OutputChecker`` provides better matching of XML, JSON,
++and numeric data types).
++
++These utilities are deprecated and will be removed in Django 1.8; doctest
++suites should be updated to work with the standard library's doctest module (or
++converted to unittest-compatible tests).
++
++If you wish to delay updates to your test suite, you can set your
++:setting:`TEST_RUNNER` setting to ``django.test.simple.DjangoTestSuiteRunner``
++to fully restore the old test behavior. ``DjangoTestSuiteRunner`` is
++deprecated but will not be removed from Django until version 1.8.
++
++.. _recommendations in the Python documentation: http://docs.python.org/2/library/doctest.html#unittest-api
++
+ Addition of ``QuerySet.datetimes()``
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+diff --git a/docs/topics/testing/advanced.txt b/docs/topics/testing/advanced.txt
+index 5f2fa65..cefb770 100644
+--- a/docs/topics/testing/advanced.txt
++++ b/docs/topics/testing/advanced.txt
+@@ -165,7 +165,7 @@ environment first. Django provides a convenience method to do this::
+ 
+ :func:`~django.test.utils.setup_test_environment` puts several Django features
+ into modes that allow for repeatable testing, but does not create the test
+-databases; :func:`django.test.simple.DjangoTestSuiteRunner.setup_databases`
++databases; :func:`django.test.runner.DiscoverRunner.setup_databases`
+ takes care of that.
+ 
+ The call to :func:`~django.test.utils.setup_test_environment` is made
+@@ -178,27 +178,27 @@ tests via Django's test runner.
+ Using different testing frameworks
+ ==================================
+ 
+-Clearly, :mod:`doctest` and :mod:`unittest` are not the only Python testing
+-frameworks. While Django doesn't provide explicit support for alternative
+-frameworks, it does provide a way to invoke tests constructed for an
+-alternative framework as if they were normal Django tests.
++Clearly, :mod:`unittest` is not the only Python testing framework. While Django
++doesn't provide explicit support for alternative frameworks, it does provide a
++way to invoke tests constructed for an alternative framework as if they were
++normal Django tests.
+ 
+ When you run ``./manage.py test``, Django looks at the :setting:`TEST_RUNNER`
+ setting to determine what to do. By default, :setting:`TEST_RUNNER` points to
+-``'django.test.simple.DjangoTestSuiteRunner'``. This class defines the default Django
++``'django.test.runner.DiscoverRunner'``. This class defines the default Django
+ testing behavior. This behavior involves:
+ 
+ #. Performing global pre-test setup.
+ 
+-#. Looking for unit tests and doctests in the ``models.py`` and
+-   ``tests.py`` files in each installed application.
++#. Looking for tests in any file below the current directory whose name matches
++   the pattern ``test*.py``.
+ 
+ #. Creating the test databases.
+ 
+ #. Running ``syncdb`` to install models and initial data into the test
+    databases.
+ 
+-#. Running the unit tests and doctests that are found.
++#. Running the tests that were found.
+ 
+ #. Destroying the test databases.
+ 
+@@ -215,15 +215,22 @@ process to satisfy whatever testing requirements you may have.
+ Defining a test runner
+ ----------------------
+ 
+-.. currentmodule:: django.test.simple
++.. currentmodule:: django.test.runner
+ 
+ A test runner is a class defining a ``run_tests()`` method. Django ships
+-with a ``DjangoTestSuiteRunner`` class that defines the default Django
++with a ``DiscoverRunner`` class that defines the default Django
+ testing behavior. This class defines the ``run_tests()`` entry point,
+ plus a selection of other methods that are used to by ``run_tests()`` to
+ set up, execute and tear down the test suite.
+ 
+-.. class:: DjangoTestSuiteRunner(verbosity=1, interactive=True, failfast=True, **kwargs)
++.. class:: DiscoverRunner(pattern='test*.py', top_level=None, verbosity=1, interactive=True, failfast=True, **kwargs)
++
++    ``DiscoverRunner`` will search for tests in any file matching ``pattern``.
++
++    ``top_level`` can be used to specify the directory containing your
++    top-level Python modules. Usually Django can figure this out automatically,
++    so it's not necessary to specify this option. If specified, it should
++    generally be the directory containing your ``manage.py`` file.
+ 
+     ``verbosity`` determines the amount of notification and debug information
+     that will be printed to the console; ``0`` is no output, ``1`` is normal
+@@ -238,11 +245,10 @@ set up, execute and tear down the test suite.
+     If ``failfast`` is ``True``, the test suite will stop running after the
+     first test failure is detected.
+ 
+-    Django will, from time to time, extend the capabilities of
+-    the test runner by adding new arguments. The ``**kwargs`` declaration
+-    allows for this expansion. If you subclass ``DjangoTestSuiteRunner`` or
+-    write your own test runner, ensure accept and handle the ``**kwargs``
+-    parameter.
++    Django may, from time to time, extend the capabilities of the test runner
++    by adding new arguments. The ``**kwargs`` declaration allows for this
++    expansion. If you subclass ``DiscoverRunner`` or write your own test
++    runner, ensure it accepts ``**kwargs``.
+ 
+     Your test runner may also define additional command-line options.
+     If you add an ``option_list`` attribute to a subclassed test runner,
+@@ -252,7 +258,7 @@ set up, execute and tear down the test suite.
+ Attributes
+ ~~~~~~~~~~
+ 
+-.. attribute:: DjangoTestSuiteRunner.option_list
++.. attribute:: DiscoverRunner.option_list
+ 
+     This is the tuple of ``optparse`` options which will be fed into the
+     management command's ``OptionParser`` for parsing arguments. See the
+@@ -261,20 +267,25 @@ Attributes
+ Methods
+ ~~~~~~~
+ 
+-.. method:: DjangoTestSuiteRunner.run_tests(test_labels, extra_tests=None, **kwargs)
++.. method:: DiscoverRunner.run_tests(test_labels, extra_tests=None, **kwargs)
+ 
+     Run the test suite.
+ 
+     ``test_labels`` is a list of strings describing the tests to be run. A test
+-    label can take one of three forms:
++    label can take one of four forms:
+ 
+-    * ``app.TestCase.test_method`` -- Run a single test method in a test
++    * ``path.to.test_module.TestCase.test_method`` -- Run a single test method
++      in a test case.
++    * ``path.to.test_module.TestCase`` -- Run all the test methods in a test
+       case.
+-    * ``app.TestCase`` -- Run all the test methods in a test case.
+-    * ``app`` -- Search for and run all tests in the named application.
++    * ``path.to.module`` -- Search for and run all tests in the named Python
++      package or module.
++    * ``path/to/directory`` -- Search for and run all tests below the named
++      directory.
+ 
+-    If ``test_labels`` has a value of ``None``, the test runner should run
+-    search for tests in all the applications in :setting:`INSTALLED_APPS`.
++    If ``test_labels`` has a value of ``None``, the test runner will search for
++    tests in all files below the current directory whose names match its
++    ``pattern`` (see above).
+ 
+     ``extra_tests`` is a list of extra ``TestCase`` instances to add to the
+     suite that is executed by the test runner. These extra tests are run
+@@ -282,13 +293,13 @@ Methods
+ 
+     This method should return the number of tests that failed.
+ 
+-.. method:: DjangoTestSuiteRunner.setup_test_environment(**kwargs)
++.. method:: DiscoverRunner.setup_test_environment(**kwargs)
+ 
+     Sets up the test environment by calling
+     :func:`~django.test.utils.setup_test_environment` and setting
+     :setting:`DEBUG` to ``False``.
+ 
+-.. method:: DjangoTestSuiteRunner.build_suite(test_labels, extra_tests=None, **kwargs)
++.. method:: DiscoverRunner.build_suite(test_labels, extra_tests=None, **kwargs)
+ 
+     Constructs a test suite that matches the test labels provided.
+ 
+@@ -309,7 +320,7 @@ Methods
+ 
+     Returns a ``TestSuite`` instance ready to be run.
+ 
+-.. method:: DjangoTestSuiteRunner.setup_databases(**kwargs)
++.. method:: DiscoverRunner.setup_databases(**kwargs)
+ 
+     Creates the test databases.
+ 
+@@ -317,13 +328,13 @@ Methods
+     that have been made. This data will be provided to the ``teardown_databases()``
+     function at the conclusion of testing.
+ 
+-.. method:: DjangoTestSuiteRunner.run_suite(suite, **kwargs)
++.. method:: DiscoverRunner.run_suite(suite, **kwargs)
+ 
+     Runs the test suite.
+ 
+     Returns the result produced by the running the test suite.
+ 
+-.. method:: DjangoTestSuiteRunner.teardown_databases(old_config, **kwargs)
++.. method:: DiscoverRunner.teardown_databases(old_config, **kwargs)
+ 
+     Destroys the test databases, restoring pre-test conditions.
+ 
+@@ -331,11 +342,11 @@ Methods
+     database configuration that need to be reversed. It is the return
+     value of the ``setup_databases()`` method.
+ 
+-.. method:: DjangoTestSuiteRunner.teardown_test_environment(**kwargs)
++.. method:: DiscoverRunner.teardown_test_environment(**kwargs)
+ 
+     Restores the pre-test environment.
+ 
+-.. method:: DjangoTestSuiteRunner.suite_result(suite, result, **kwargs)
++.. method:: DiscoverRunner.suite_result(suite, result, **kwargs)
+ 
+     Computes and returns a return code based on a test suite, and the result
+     from that test suite.
+@@ -402,7 +413,7 @@ can be useful during testing.
+     ``old_database_name``.
+ 
+     The ``verbosity`` argument has the same behavior as for
+-    :class:`~django.test.simple.DjangoTestSuiteRunner`.
++    :class:`~django.test.runner.DiscoverRunner`.
+ 
+ .. _topics-testing-code-coverage:
+ 
+diff --git a/docs/topics/testing/doctests.txt b/docs/topics/testing/doctests.txt
+deleted file mode 100644
+index 5036e94..0000000
+--- a/docs/topics/testing/doctests.txt
++++ /dev/null
+@@ -1,81 +0,0 @@
+-===================
+-Django and doctests
+-===================
+-
+-Doctests use Python's standard :mod:`doctest` module, which searches your
+-docstrings for statements that resemble a session of the Python interactive
+-interpreter. A full explanation of how :mod:`doctest` works is out of the scope
+-of this document; read Python's official documentation for the details.
+-
+-.. admonition:: What's a **docstring**?
+-
+-    A good explanation of docstrings (and some guidelines for using them
+-    effectively) can be found in :pep:`257`:
+-
+-        A docstring is a string literal that occurs as the first statement in
+-        a module, function, class, or method definition.  Such a docstring
+-        becomes the ``__doc__`` special attribute of that object.
+-
+-    For example, this function has a docstring that describes what it does::
+-
+-        def add_two(num):
+-            "Return the result of adding two to the provided number."
+-            return num + 2
+-
+-    Because tests often make great documentation, putting tests directly in
+-    your docstrings is an effective way to document *and* test your code.
+-
+-As with unit tests, for a given Django application, the test runner looks for
+-doctests in two places:
+-
+-* The ``models.py`` file. You can define module-level doctests and/or a
+-  doctest for individual models. It's common practice to put
+-  application-level doctests in the module docstring and model-level
+-  doctests in the model docstrings.
+-
+-* A file called ``tests.py`` in the application directory -- i.e., the
+-  directory that holds ``models.py``. This file is a hook for any and all
+-  doctests you want to write that aren't necessarily related to models.
+-
+-This example doctest is equivalent to the example given in the unittest section
+-above::
+-
+-    # models.py
+-
+-    from django.db import models
+-
+-    class Animal(models.Model):
+-        """
+-        An animal that knows how to make noise
+-
+-        # Create some animals
+-        >>> lion = Animal.objects.create(name="lion", sound="roar")
+-        >>> cat = Animal.objects.create(name="cat", sound="meow")
+-
+-        # Make 'em speak
+-        >>> lion.speak()
+-        'The lion says "roar"'
+-        >>> cat.speak()
+-        'The cat says "meow"'
+-        """
+-        name = models.CharField(max_length=20)
+-        sound = models.CharField(max_length=20)
+-
+-        def speak(self):
+-            return 'The %s says "%s"' % (self.name, self.sound)
+-
+-When you :ref:`run your tests <running-tests>`, the test runner will find this
+-docstring, notice that portions of it look like an interactive Python session,
+-and execute those lines while checking that the results match.
+-
+-In the case of model tests, note that the test runner takes care of creating
+-its own test database. That is, any test that accesses a database -- by
+-creating and saving model instances, for example -- will not affect your
+-production database. However, the database is not refreshed between doctests,
+-so if your doctest requires a certain state you should consider flushing the
+-database or loading a fixture. (See the section on :ref:`fixtures
+-<topics-testing-fixtures>` for more on this.) Note that to use this feature,
+-the database user Django is connecting as must have ``CREATE DATABASE``
+-rights.
+-
+-For more details about :mod:`doctest`, see the Python documentation.
+diff --git a/docs/topics/testing/index.txt b/docs/topics/testing/index.txt
+index 94e88bd..1a99a39 100644
+--- a/docs/topics/testing/index.txt
++++ b/docs/topics/testing/index.txt
+@@ -6,7 +6,6 @@ Testing in Django
+    :hidden:
+ 
+    overview
+-   doctests
+    advanced
+ 
+ Automated testing is an extremely useful bug-killing tool for the modern
+@@ -29,83 +28,13 @@ it should be doing.
+ 
+ The best part is, it's really easy.
+ 
+-Unit tests v. doctests
+-======================
+-
+-There are two primary ways to write tests with Django, corresponding to the
+-two test frameworks that ship in the Python standard library. The two
+-frameworks are:
+-
+-* **Unit tests** -- tests that are expressed as methods on a Python class
+-  that subclasses :class:`unittest.TestCase` or Django's customized
+-  :class:`~django.test.TestCase`. For example::
+-
+-      import unittest
+-
+-      class MyFuncTestCase(unittest.TestCase):
+-          def testBasic(self):
+-              a = ['larry', 'curly', 'moe']
+-              self.assertEqual(my_func(a, 0), 'larry')
+-              self.assertEqual(my_func(a, 1), 'curly')
+-
+-* **Doctests** -- tests that are embedded in your functions' docstrings and
+-  are written in a way that emulates a session of the Python interactive
+-  interpreter. For example::
+-
+-      def my_func(a_list, idx):
+-          """
+-          >>> a = ['larry', 'curly', 'moe']
+-          >>> my_func(a, 0)
+-          'larry'
+-          >>> my_func(a, 1)
+-          'curly'
+-          """
+-          return a_list[idx]
+-
+-Which should I use?
+--------------------
+-
+-Because Django supports both of the standard Python test frameworks, it's up to
+-you and your tastes to decide which one to use. You can even decide to use
+-*both*.
+-
+-For developers new to testing, however, this choice can seem confusing. Here,
+-then, are a few key differences to help you decide which approach is right for
+-you:
+-
+-* If you've been using Python for a while, :mod:`doctest` will probably feel
+-  more "pythonic". It's designed to make writing tests as easy as possible,
+-  so it requires no overhead of writing classes or methods. You simply put
+-  tests in docstrings. This has the added advantage of serving as
+-  documentation (and correct documentation, at that!). However, while
+-  doctests are good for some simple example code, they are not very good if
+-  you want to produce either high quality, comprehensive tests or high
+-  quality documentation. Test failures are often difficult to debug
+-  as it can be unclear exactly why the test failed. Thus, doctests should
+-  generally be avoided and used primarily for documentation examples only.
+-
+-* The :mod:`unittest` framework will probably feel very familiar to
+-  developers coming from Java. :mod:`unittest` is inspired by Java's JUnit,
+-  so you'll feel at home with this method if you've used JUnit or any test
+-  framework inspired by JUnit.
+-
+-* If you need to write a bunch of tests that share similar code, then
+-  you'll appreciate the :mod:`unittest` framework's organization around
+-  classes and methods. This makes it easy to abstract common tasks into
+-  common methods. The framework also supports explicit setup and/or cleanup
+-  routines, which give you a high level of control over the environment
+-  in which your test cases are run.
+-
+-* If you're writing tests for Django itself, you should use :mod:`unittest`.
+-
+ Where to go from here
+ =====================
+ 
+-As unit tests are preferred in Django, we treat them in detail in the
++The preferred way to write tests in Django is using the :mod:`unittest` module
++built in to the Python standard library. This is covered in detail in the
+ :doc:`overview` document.
+ 
+-:doc:`doctests` describes Django-specific features when using doctests.
+-
+-You can also use any *other* Python test framework, Django provides an API and
++You can also use any *other* Python test framework; Django provides an API and
+ tools for that kind of integration. They are described in the
+ :ref:`other-testing-frameworks` section of :doc:`advanced`.
+diff --git a/docs/topics/testing/overview.txt b/docs/topics/testing/overview.txt
+index 9228a07..5023e09 100644
+--- a/docs/topics/testing/overview.txt
++++ b/docs/topics/testing/overview.txt
+@@ -17,7 +17,7 @@ Writing tests
+ =============
+ 
+ Django's unit tests use a Python standard library module: :mod:`unittest`. This
+-module defines tests in class-based approach.
++module defines tests using a class-based approach.
+ 
+ .. admonition:: unittest2
+ 
+@@ -46,16 +46,6 @@ module defines tests in class-based approach.
+ 
+ .. _unittest2: http://pypi.python.org/pypi/unittest2
+ 
+-For a given Django application, the test runner looks for unit tests in two
+-places:
+-
+-* The ``models.py`` file. The test runner looks for any subclass of
+-  :class:`unittest.TestCase` in this module.
+-
+-* A file called ``tests.py`` in the application directory -- i.e., the
+-  directory that holds ``models.py``. Again, the test runner looks for any
+-  subclass of :class:`unittest.TestCase` in this module.
+-
+ Here is an example :class:`unittest.TestCase` subclass::
+ 
+     from django.utils import unittest
+@@ -71,21 +61,18 @@ Here is an example :class:`unittest.TestCase` subclass::
+             self.assertEqual(self.lion.speak(), 'The lion says "roar"')
+             self.assertEqual(self.cat.speak(), 'The cat says "meow"')
+ 
+-When you :ref:`run your tests <running-tests>`, the default behavior of the test
+-utility is to find all the test cases (that is, subclasses of
+-:class:`unittest.TestCase`) in ``models.py`` and ``tests.py``, automatically
+-build a test suite out of those test cases, and run that suite.
++When you :ref:`run your tests <running-tests>`, the default behavior of the
++test utility is to find all the test cases (that is, subclasses of
++:class:`unittest.TestCase`) in any file whose name begins with ``test``,
++automatically build a test suite out of those test cases, and run that suite.
+ 
+-There is a second way to define the test suite for a module: if you define a
+-function called ``suite()`` in either ``models.py`` or ``tests.py``, the
+-Django test runner will use that function to construct the test suite for that
+-module. This follows the `suggested organization`_ for unit tests. See the
+-Python documentation for more details on how to construct a complex test
+-suite.
++.. versionchanged:: 1.6
+ 
+-For more details about :mod:`unittest`, see the Python documentation.
++   Previously, Django's default test runner only discovered tests in
++   ``tests.py`` and ``models.py`` files within a Python package listed in
++   :setting:`INSTALLED_APPS`.
+ 
+-.. _suggested organization: http://docs.python.org/library/unittest.html#organizing-tests
++For more details about :mod:`unittest`, see the Python documentation.
+ 
+ .. warning::
+ 
+@@ -101,6 +88,7 @@ For more details about :mod:`unittest`, see the Python documentation.
+ 
+ .. _running-tests:
+ 
++
+ Running tests
+ =============
+ 
+@@ -109,46 +97,47 @@ your project's ``manage.py`` utility::
+ 
+     $ ./manage.py test
+ 
+-By default, this will run every test in every application in
+-:setting:`INSTALLED_APPS`. If you only want to run tests for a particular
+-application, add the application name to the command line. For example, if your
+-:setting:`INSTALLED_APPS` contains ``'myproject.polls'`` and
+-``'myproject.animals'``, you can run the ``myproject.animals`` unit tests alone
+-with this command::
++Test discovery is based on the unittest module's `built-in test discovery`.  By
++default, this will discover tests in any file named "test*.py" under the
++current working directory.
+ 
+-    $ ./manage.py test animals
++.. _built-in test discovery: http://docs.python.org/2/library/unittest.html#test-discovery
+ 
+-Note that we used ``animals``, not ``myproject.animals``.
++You can specify particular tests to run by supplying any number of "test
++labels" to ``./manage.py test``. Each test label can be a full Python dotted
++path to a package, module, ``TestCase`` subclass, or test method. For instance::
+ 
+-You can be even *more* specific by naming an individual test case. To
+-run a single test case in an application (for example, the
+-``AnimalTestCase`` described in the "Writing unit tests" section), add
+-the name of the test case to the label on the command line::
++    # Run all the tests in the animals.tests module
++    $ ./manage.py test animals.tests
+ 
+-    $ ./manage.py test animals.AnimalTestCase
++    # Run all the tests found within the 'animals' package
++    $ ./manage.py test animals
+ 
+-And it gets even more granular than that! To run a *single* test
+-method inside a test case, add the name of the test method to the
+-label::
++    # Run just one test case
++    $ ./manage.py test animals.tests.AnimalTestCase
+ 
+-    $ ./manage.py test animals.AnimalTestCase.test_animals_can_speak
++    # Run just one test method
++    $ ./manage.py test animals.tests.AnimalTestCase.test_animals_can_speak
+ 
+-You can use the same rules if you're using doctests. Django will use the
+-test label as a path to the test method or class that you want to run.
+-If your ``models.py`` or ``tests.py`` has a function with a doctest, or
+-class with a class-level doctest, you can invoke that test by appending the
+-name of the test method or class to the label::
++You can also provide a path to a directory to discover tests below that
++directory::
+ 
+-    $ ./manage.py test animals.classify
++    $ ./manage.py test animals/
+ 
+-If you want to run the doctest for a specific method in a class, add the
+-name of the method to the label::
++You can specify a custom filename pattern match using the ``-p`` (or
++``--pattern``) option, if your test files are named differently from the
++``test*.py`` pattern::
+ 
+-    $ ./manage.py test animals.Classifier.run
++    $ ./manage.py test --pattern="tests_*.py"
+ 
+-If you're using a ``__test__`` dictionary to specify doctests for a
+-module, Django will use the label as a key in the ``__test__`` dictionary
+-for defined in ``models.py`` and ``tests.py``.
++.. versionchanged:: 1.6
++
++   Previously, test labels were in the form ``applabel``,
++   ``applabel.TestCase``, or ``applabel.TestCase.test_method``, rather than
++   being true Python dotted paths, and tests could only be found within
++   ``tests.py`` or ``models.py`` files within a Python package listed in
++   :setting:`INSTALLED_APPS`. The ``--pattern`` option and file paths as test
++   labels are new in 1.6.
+ 
+ If you press ``Ctrl-C`` while the tests are running, the test runner will
+ wait for the currently running test to complete and then exit gracefully.
+@@ -173,6 +162,7 @@ be reported, and any test databases created by the run will not be destroyed.
+     flag areas in your code that aren't strictly wrong but could benefit
+     from a better implementation.
+ 
++
+ .. _the-test-database:
+ 
+ The test database
+diff --git a/tests/admin_scripts/tests.py b/tests/admin_scripts/tests.py
+index 5071977..c898677 100644
+--- a/tests/admin_scripts/tests.py
++++ b/tests/admin_scripts/tests.py
+@@ -19,9 +19,9 @@ from django import conf, get_version
+ from django.conf import settings
+ from django.core.management import BaseCommand, CommandError
+ from django.db import connection
+-from django.test.simple import DjangoTestSuiteRunner
++from django.test.runner import DiscoverRunner
+ from django.utils import unittest
+-from django.utils.encoding import force_str, force_text
++from django.utils.encoding import force_text
+ from django.utils._os import upath
+ from django.utils.six import StringIO
+ from django.test import LiveServerTestCase
+@@ -1090,7 +1090,7 @@ class ManageValidate(AdminScriptTestCase):
+         self.assertOutput(out, '0 errors found')
+ 
+ 
+-class CustomTestRunner(DjangoTestSuiteRunner):
++class CustomTestRunner(DiscoverRunner):
+ 
+     def __init__(self, *args, **kwargs):
+         assert 'liveserver' not in kwargs
+diff --git a/tests/generic_views/tests.py b/tests/generic_views/tests.py
+deleted file mode 100644
+index 244aa3c..0000000
+--- a/tests/generic_views/tests.py
++++ /dev/null
+@@ -1,11 +0,0 @@
+-from __future__ import absolute_import
+-
+-from .test_base import (ViewTest, TemplateViewTest, RedirectViewTest,
+-    GetContextDataTest)
+-from .test_dates import (ArchiveIndexViewTests, YearArchiveViewTests,
+-    MonthArchiveViewTests, WeekArchiveViewTests, DayArchiveViewTests,
+-    DateDetailViewTests)
+-from .test_detail import DetailViewTest
+-from .test_edit import (FormMixinTests, BasicFormTests, ModelFormMixinTests,
+-    CreateViewTests, UpdateViewTests, DeleteViewTests)
+-from .test_list import ListViewTests
+diff --git a/tests/i18n/tests.py b/tests/i18n/tests.py
+index d26a201..1022c8d 100644
+--- a/tests/i18n/tests.py
++++ b/tests/i18n/tests.py
+@@ -43,14 +43,8 @@ if can_run_compilation_tests:
+     from .commands.compilation import (PoFileTests, PoFileContentsTests,
+         PercentRenderingTests, MultipleLocaleCompilationTests,
+         CompilationErrorHandling)
+-from .contenttypes.tests import ContentTypeTests
+ from .forms import I18nForm, SelectDateForm, SelectDateWidget, CompanyForm
+ from .models import Company, TestModel
+-from .patterns.tests import (URLRedirectWithoutTrailingSlashTests,
+-    URLTranslationTests, URLDisabledTests, URLTagTests, URLTestCaseBase,
+-    URLRedirectWithoutTrailingSlashSettingTests, URLNamespaceTests,
+-    URLPrefixTests, URLResponseTests, URLRedirectTests, PathUnusedTests,
+-    URLVaryAcceptLanguageTests)
+ 
+ 
+ here = os.path.dirname(os.path.abspath(upath(__file__)))
+diff --git a/tests/model_fields/tests.py b/tests/model_fields/tests.py
+index 035a5c2..e1e38d0 100644
+--- a/tests/model_fields/tests.py
++++ b/tests/model_fields/tests.py
+@@ -15,11 +15,6 @@ from .models import (Foo, Bar, Whiz, BigD, BigS, Image, BigInt, Post,
+     NullBooleanModel, BooleanModel, DataModel, Document, RenamedField,
+     VerboseNameField, FksToBooleans)
+ 
+-from .test_imagefield import (ImageFieldTests, ImageFieldTwoDimensionsTests,
+-    TwoImageFieldTests, ImageFieldNoDimensionsTests,
+-    ImageFieldOneDimensionTests, ImageFieldDimensionsFirstTests,
+-    ImageFieldUsingFileTests)
+-
+ 
+ class BasicFieldTests(test.TestCase):
+     def test_show_hidden_initial(self):
+diff --git a/tests/runtests.py b/tests/runtests.py
+index ee2488c..cb124f2 100755
+--- a/tests/runtests.py
++++ b/tests/runtests.py
+@@ -10,16 +10,23 @@ from django import contrib
+ from django.utils._os import upath
+ from django.utils import six
+ 
+-CONTRIB_DIR_NAME = 'django.contrib'
++CONTRIB_MODULE_PATH = 'django.contrib'
+ 
+ TEST_TEMPLATE_DIR = 'templates'
+ 
+ RUNTESTS_DIR = os.path.abspath(os.path.dirname(upath(__file__)))
+ CONTRIB_DIR = os.path.dirname(upath(contrib.__file__))
++
+ TEMP_DIR = tempfile.mkdtemp(prefix='django_')
+ os.environ['DJANGO_TEST_TEMP_DIR'] = TEMP_DIR
+ 
+-SUBDIRS_TO_SKIP = ['templates']
++SUBDIRS_TO_SKIP = [
++    'templates',
++    'test_discovery_sample',
++    'test_discovery_sample2',
++    'test_runner_deprecation_app',
++    'test_runner_invalid_app',
++]
+ 
+ ALWAYS_INSTALLED_APPS = [
+     'shared_models',
+@@ -40,17 +47,12 @@ ALWAYS_INSTALLED_APPS = [
+     'staticfiles_tests.apps.no_label',
+ ]
+ 
+-def geodjango(settings):
+-    # All databases must have spatial backends to run GeoDjango tests.
+-    spatial_dbs = [name for name, db_dict in settings.DATABASES.items()
+-                   if db_dict['ENGINE'].startswith('django.contrib.gis')]
+-    return len(spatial_dbs) == len(settings.DATABASES)
+ 
+ def get_test_modules():
+     modules = []
+-    for loc, dirpath in (
++    for modpath, dirpath in (
+         (None, RUNTESTS_DIR),
+-        (CONTRIB_DIR_NAME, CONTRIB_DIR)):
++        (CONTRIB_MODULE_PATH, CONTRIB_DIR)):
+         for f in os.listdir(dirpath):
+             if ('.' in f or
+                 # Python 3 byte code dirs (PEP 3147)
+@@ -59,9 +61,14 @@ def get_test_modules():
+                 os.path.basename(f) in SUBDIRS_TO_SKIP or
+                 os.path.isfile(f)):
+                 continue
+-            modules.append((loc, f))
++            modules.append((modpath, f))
+     return modules
+ 
++def get_installed():
++    from django.db.models.loading import get_apps
++    return [app.__name__.rsplit('.', 1)[0] for app in get_apps()]
++
++
+ def setup(verbosity, test_labels):
+     from django.conf import settings
+     from django.db.models.loading import get_apps, load_app
+@@ -95,25 +102,45 @@ def setup(verbosity, test_labels):
+     get_apps()
+ 
+     # Load all the test model apps.
+-    test_labels_set = set([label.split('.')[0] for label in test_labels])
+     test_modules = get_test_modules()
+ 
++    # Reduce given test labels to just the app module path
++    test_labels_set = set()
++    for label in test_labels:
++        bits = label.split('.')
++        if bits[:2] == ['django', 'contrib']:
++            bits = bits[:3]
++        else:
++            bits = bits[:1]
++        test_labels_set.add('.'.join(bits))
++
+     # If GeoDjango, then we'll want to add in the test applications
+     # that are a part of its test suite.
+-    if geodjango(settings):
++    from django.contrib.gis.tests.utils import HAS_SPATIAL_DB
++    if HAS_SPATIAL_DB:
+         from django.contrib.gis.tests import geo_apps
+-        test_modules.extend(geo_apps(runtests=True))
++        test_modules.extend(geo_apps())
+         settings.INSTALLED_APPS.extend(['django.contrib.gis', 'django.contrib.sitemaps'])
+ 
+-    for module_dir, module_name in test_modules:
+-        if module_dir:
+-            module_label = '.'.join([module_dir, module_name])
++    for modpath, module_name in test_modules:
++        if modpath:
++            module_label = '.'.join([modpath, module_name])
+         else:
+             module_label = module_name
+-        # if the module was named on the command line, or
++        # if the module (or an ancestor) was named on the command line, or
+         # no modules were named (i.e., run all), import
+-        # this module and add it to the list to test.
+-        if not test_labels or module_name in test_labels_set:
++        # this module and add it to INSTALLED_APPS.
++        if not test_labels:
++            module_found_in_labels = True
++        else:
++            match = lambda label: (
++                module_label == label or # exact match
++                module_label.startswith(label + '.') # ancestor match
++                )
++
++            module_found_in_labels = any(match(l) for l in test_labels_set)
++
++        if module_found_in_labels:
+             if verbosity >= 2:
+                 print("Importing application %s" % module_name)
+             mod = load_app(module_label)
+@@ -139,21 +166,16 @@ def django_tests(verbosity, interactive, failfast, test_labels):
+     state = setup(verbosity, test_labels)
+     extra_tests = []
+ 
+-    # If GeoDjango is used, add it's tests that aren't a part of
+-    # an application (e.g., GEOS, GDAL, Distance objects).
+-    if geodjango(settings) and (not test_labels or 'gis' in test_labels):
+-        from django.contrib.gis.tests import geodjango_suite
+-        extra_tests.append(geodjango_suite(apps=False))
+-
+     # Run the test suite, including the extra validation tests.
+-    from django.test.utils import get_runner
+-    if not hasattr(settings, 'TEST_RUNNER'):                   ########################hasattr
+-        settings.TEST_RUNNER = 'django.test.simple.DjangoTestSuiteRunner'
+-    TestRunner = get_runner(settings)
++    from django.test.runner import DiscoverRunner
+ 
+-    test_runner = TestRunner(verbosity=verbosity, interactive=interactive,
+-        failfast=failfast)
+-    failures = test_runner.run_tests(test_labels, extra_tests=extra_tests)
++    test_runner = DiscoverRunner(
++        verbosity=verbosity,
++        interactive=interactive,
++        failfast=failfast,
++    )
++    failures = test_runner.run_tests(
++        test_labels or get_installed(), extra_tests=extra_tests)
+ 
+     teardown(state)
+     return failures
+@@ -162,10 +184,7 @@ def django_tests(verbosity, interactive, failfast, test_labels):
+ def bisect_tests(bisection_label, options, test_labels):
+     state = setup(int(options.verbosity), test_labels)
+ 
+-    if not test_labels:
+-        # Get the full list of test labels to use for bisection
+-        from django.db.models.loading import get_apps
+-        test_labels = [app.__name__.split('.')[-2] for app in get_apps()]
++    test_labels = test_labels or get_installed()
+ 
+     print('***** Bisecting test suite: %s' % ' '.join(test_labels))
+ 
+@@ -222,11 +241,7 @@ def bisect_tests(bisection_label, options, test_labels):
+ def paired_tests(paired_test, options, test_labels):
+     state = setup(int(options.verbosity), test_labels)
+ 
+-    if not test_labels:
+-        print("")
+-        # Get the full list of test labels to use for bisection
+-        from django.db.models.loading import get_apps
+-        test_labels = [app.__name__.split('.')[-2] for app in get_apps()]
++    test_labels = test_labels or get_installed()
+ 
+     print('***** Trying paired execution')
+ 
+diff --git a/tests/template_tests/tests.py b/tests/template_tests/tests.py
+index da1562d..2aeaee9 100644
+--- a/tests/template_tests/tests.py
++++ b/tests/template_tests/tests.py
+@@ -36,15 +36,6 @@ from django.utils.safestring import mark_safe
+ from django.utils import six
+ from django.utils.tzinfo import LocalTimezone
+ 
+-from .test_callables import CallableVariablesTests
+-from .test_context import ContextTests
+-from .test_custom import CustomTagTests, CustomFilterTests
+-from .test_parser import ParserTests
+-from .test_unicode import UnicodeTests
+-from .test_nodelist import NodelistTest, ErrorIndexTest
+-from .test_smartif import SmartIfTests
+-from .test_response import (TemplateResponseTest, CacheMiddlewareTest,
+-    SimpleTemplateResponseTest, CustomURLConfTest)
+ 
+ try:
+     from .loaders import RenderToStringTest, EggLoaderTest
+diff --git a/tests/test_discovery_sample/__init__.py b/tests/test_discovery_sample/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/test_discovery_sample/pattern_tests.py b/tests/test_discovery_sample/pattern_tests.py
+new file mode 100644
+index 0000000..f62a233
+--- /dev/null
++++ b/tests/test_discovery_sample/pattern_tests.py
+@@ -0,0 +1,7 @@
++from unittest import TestCase
++
++
++class Test(TestCase):
++
++    def test_sample(self):
++        self.assertEqual(1, 1)
+diff --git a/tests/test_discovery_sample/tests/__init__.py b/tests/test_discovery_sample/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/test_discovery_sample/tests/tests.py b/tests/test_discovery_sample/tests/tests.py
+new file mode 100644
+index 0000000..58bd4e7
+--- /dev/null
++++ b/tests/test_discovery_sample/tests/tests.py
+@@ -0,0 +1,7 @@
++from unittest import TestCase
++
++
++class Test(TestCase):
++
++    def test_sample(self):
++        pass
+diff --git a/tests/test_discovery_sample/tests_sample.py b/tests/test_discovery_sample/tests_sample.py
+new file mode 100644
+index 0000000..c541bc4
+--- /dev/null
++++ b/tests/test_discovery_sample/tests_sample.py
+@@ -0,0 +1,22 @@
++from unittest import TestCase as UnitTestCase
++
++from django.test import TestCase as DjangoTestCase
++from django.utils.unittest import TestCase as UT2TestCase
++
++
++class TestVanillaUnittest(UnitTestCase):
++
++    def test_sample(self):
++        self.assertEqual(1, 1)
++
++
++class TestUnittest2(UT2TestCase):
++
++    def test_sample(self):
++        self.assertEqual(1, 1)
++
++
++class TestDjangoTestCase(DjangoTestCase):
++
++    def test_sample(self):
++        self.assertEqual(1, 1)
+diff --git a/tests/test_discovery_sample2/__init__.py b/tests/test_discovery_sample2/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/test_discovery_sample2/tests.py b/tests/test_discovery_sample2/tests.py
+new file mode 100644
+index 0000000..232054a
+--- /dev/null
++++ b/tests/test_discovery_sample2/tests.py
+@@ -0,0 +1,7 @@
++from django.test import TestCase
++
++
++class Test(TestCase):
++
++    def test_sample(self):
++        pass
+diff --git a/tests/test_runner/deprecation_app/__init__.py b/tests/test_runner/deprecation_app/__init__.py
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/tests/test_runner/deprecation_app/models.py b/tests/test_runner/deprecation_app/models.py
+deleted file mode 100644
+index 71a8362..0000000
+--- a/tests/test_runner/deprecation_app/models.py
++++ /dev/null
+@@ -1,3 +0,0 @@
+-from django.db import models
+-
+-# Create your models here.
+diff --git a/tests/test_runner/deprecation_app/tests.py b/tests/test_runner/deprecation_app/tests.py
+deleted file mode 100644
+index 6dee088..0000000
+--- a/tests/test_runner/deprecation_app/tests.py
++++ /dev/null
+@@ -1,11 +0,0 @@
+-import warnings
+-
+-from django.test import TestCase
+-
+-warnings.warn("module-level warning from deprecation_app", DeprecationWarning)
+-
+-class DummyTest(TestCase):
+-    def test_warn(self):
+-        warnings.warn("warning from test", DeprecationWarning)
+-
+-
+diff --git a/tests/test_runner/invalid_app/__init__.py b/tests/test_runner/invalid_app/__init__.py
+deleted file mode 100644
+index 45efd37..0000000
+--- a/tests/test_runner/invalid_app/__init__.py
++++ /dev/null
+@@ -1,4 +0,0 @@
+-# Example of app layout that causes issue #12658:
+-# * Both `models` and `tests` are packages.
+-# * The tests raise a ImportError exception.
+-# `test_runner` tests performs test discovery on this app.
+diff --git a/tests/test_runner/invalid_app/models/__init__.py b/tests/test_runner/invalid_app/models/__init__.py
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/tests/test_runner/invalid_app/tests/__init__.py b/tests/test_runner/invalid_app/tests/__init__.py
+deleted file mode 100644
+index b4ed718..0000000
+--- a/tests/test_runner/invalid_app/tests/__init__.py
++++ /dev/null
+@@ -1,4 +0,0 @@
+-# Tests that raise ImportError should not fail silently.
+-# This is a support fixture for one test case in test_runner
+-
+-raise ImportError
+diff --git a/tests/test_runner/test_discover_runner.py b/tests/test_runner/test_discover_runner.py
+new file mode 100644
+index 0000000..3dc364b
+--- /dev/null
++++ b/tests/test_runner/test_discover_runner.py
+@@ -0,0 +1,68 @@
++from django.test import TestCase
++from django.test.runner import DiscoverRunner
++
++
++class DiscoverRunnerTest(TestCase):
++
++    def test_dotted_test_module(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample.tests_sample"],
++        ).countTestCases()
++
++        self.assertEqual(count, 3)
++
++    def test_dotted_test_class_vanilla_unittest(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample.tests_sample.TestVanillaUnittest"],
++        ).countTestCases()
++
++        self.assertEqual(count, 1)
++
++    def test_dotted_test_class_unittest2(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample.tests_sample.TestUnittest2"],
++        ).countTestCases()
++
++        self.assertEqual(count, 1)
++
++    def test_dotted_test_class_django_testcase(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample.tests_sample.TestDjangoTestCase"],
++        ).countTestCases()
++
++        self.assertEqual(count, 1)
++
++    def test_dotted_test_method_vanilla_unittest(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample.tests_sample.TestVanillaUnittest.test_sample"],
++        ).countTestCases()
++
++        self.assertEqual(count, 1)
++
++    def test_dotted_test_method_unittest2(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample.tests_sample.TestUnittest2.test_sample"],
++        ).countTestCases()
++
++        self.assertEqual(count, 1)
++
++    def test_dotted_test_method_django_testcase(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample.tests_sample.TestDjangoTestCase.test_sample"],
++        ).countTestCases()
++
++        self.assertEqual(count, 1)
++
++    def test_pattern(self):
++        count = DiscoverRunner(
++            pattern="*_tests.py",
++        ).build_suite(["test_discovery_sample"]).countTestCases()
++
++        self.assertEqual(count, 1)
++
++    def test_file_path(self):
++        count = DiscoverRunner().build_suite(
++            ["test_discovery_sample/"],
++        ).countTestCases()
++
++        self.assertEqual(count, 4)
+diff --git a/tests/test_runner/tests.py b/tests/test_runner/tests.py
+index 9f0cc79..95ccf02 100644
+--- a/tests/test_runner/tests.py
++++ b/tests/test_runner/tests.py
+@@ -9,7 +9,7 @@ from optparse import make_option
+ from django.core.exceptions import ImproperlyConfigured
+ from django.core.management import call_command
+ from django import db
+-from django.test import simple, TransactionTestCase, skipUnlessDBFeature
++from django.test import runner, TransactionTestCase, skipUnlessDBFeature
+ from django.test.simple import DjangoTestSuiteRunner, get_tests
+ from django.test.testcases import connections_support_transactions
+ from django.utils import unittest
+@@ -20,7 +20,7 @@ from .models import Person
+ 
+ 
+ TEST_APP_OK = 'test_runner.valid_app.models'
+-TEST_APP_ERROR = 'test_runner.invalid_app.models'
++TEST_APP_ERROR = 'test_runner_invalid_app.models'
+ 
+ 
+ class DependencyOrderingTests(unittest.TestCase):
+@@ -36,7 +36,7 @@ class DependencyOrderingTests(unittest.TestCase):
+             'bravo': ['charlie'],
+         }
+ 
+-        ordered = simple.dependency_ordered(raw, dependencies=dependencies)
++        ordered = runner.dependency_ordered(raw, dependencies=dependencies)
+         ordered_sigs = [sig for sig,value in ordered]
+ 
+         self.assertIn('s1', ordered_sigs)
+@@ -56,7 +56,7 @@ class DependencyOrderingTests(unittest.TestCase):
+             'bravo': ['charlie'],
+         }
+ 
+-        ordered = simple.dependency_ordered(raw, dependencies=dependencies)
++        ordered = runner.dependency_ordered(raw, dependencies=dependencies)
+         ordered_sigs = [sig for sig,value in ordered]
+ 
+         self.assertIn('s1', ordered_sigs)
+@@ -83,7 +83,7 @@ class DependencyOrderingTests(unittest.TestCase):
+             'delta': ['charlie'],
+         }
+ 
+-        ordered = simple.dependency_ordered(raw, dependencies=dependencies)
++        ordered = runner.dependency_ordered(raw, dependencies=dependencies)
+         ordered_sigs = [sig for sig,aliases in ordered]
+ 
+         self.assertIn('s1', ordered_sigs)
+@@ -110,7 +110,7 @@ class DependencyOrderingTests(unittest.TestCase):
+             'alpha': ['bravo'],
+         }
+ 
+-        self.assertRaises(ImproperlyConfigured, simple.dependency_ordered, raw, dependencies=dependencies)
++        self.assertRaises(ImproperlyConfigured, runner.dependency_ordered, raw, dependencies=dependencies)
+ 
+     def test_own_alias_dependency(self):
+         raw = [
+@@ -121,7 +121,7 @@ class DependencyOrderingTests(unittest.TestCase):
+         }
+ 
+         with self.assertRaises(ImproperlyConfigured):
+-            simple.dependency_ordered(raw, dependencies=dependencies)
++            runner.dependency_ordered(raw, dependencies=dependencies)
+ 
+         # reordering aliases shouldn't matter
+         raw = [
+@@ -129,7 +129,7 @@ class DependencyOrderingTests(unittest.TestCase):
+         ]
+ 
+         with self.assertRaises(ImproperlyConfigured):
+-            simple.dependency_ordered(raw, dependencies=dependencies)
++            runner.dependency_ordered(raw, dependencies=dependencies)
+ 
+ 
+ class MockTestRunner(object):
+@@ -156,7 +156,7 @@ class ManageCommandTests(unittest.TestCase):
+                 testrunner='test_runner.NonExistentRunner')
+ 
+ 
+-class CustomOptionsTestRunner(simple.DjangoTestSuiteRunner):
++class CustomOptionsTestRunner(runner.DiscoverRunner):
+     option_list = (
+         make_option('--option_a','-a', action='store', dest='option_a', default='1'),
+         make_option('--option_b','-b', action='store', dest='option_b', default='2'),
+@@ -289,15 +289,16 @@ class DummyBackendTest(unittest.TestCase):
+ class DeprecationDisplayTest(AdminScriptTestCase):
+     # tests for 19546
+     def setUp(self):
+-        settings = {'INSTALLED_APPS': '("test_runner.deprecation_app",)',
+-                    'DATABASES': '{"default": {"ENGINE":"django.db.backends.sqlite3", "NAME":":memory:"}}' }
++        settings = {
++            'DATABASES': '{"default": {"ENGINE":"django.db.backends.sqlite3", "NAME":":memory:"}}'
++            }
+         self.write_settings('settings.py', sdict=settings)
+ 
+     def tearDown(self):
+         self.remove_settings('settings.py')
+ 
+     def test_runner_deprecation_verbosity_default(self):
+-        args = ['test', '--settings=test_project.settings']
++        args = ['test', '--settings=test_project.settings', 'test_runner_deprecation_app']
+         out, err = self.run_django_admin(args)
+         self.assertIn("DeprecationWarning: warning from test", err)
+         self.assertIn("DeprecationWarning: module-level warning from deprecation_app", err)
+diff --git a/tests/test_runner_deprecation_app/__init__.py b/tests/test_runner_deprecation_app/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/test_runner_deprecation_app/models.py b/tests/test_runner_deprecation_app/models.py
+new file mode 100644
+index 0000000..71a8362
+--- /dev/null
++++ b/tests/test_runner_deprecation_app/models.py
+@@ -0,0 +1,3 @@
++from django.db import models
++
++# Create your models here.
+diff --git a/tests/test_runner_deprecation_app/tests.py b/tests/test_runner_deprecation_app/tests.py
+new file mode 100644
+index 0000000..24d716f
+--- /dev/null
++++ b/tests/test_runner_deprecation_app/tests.py
+@@ -0,0 +1,9 @@
++import warnings
++
++from django.test import TestCase
++
++warnings.warn("module-level warning from deprecation_app", DeprecationWarning)
++
++class DummyTest(TestCase):
++    def test_warn(self):
++        warnings.warn("warning from test", DeprecationWarning)
+diff --git a/tests/test_runner_invalid_app/__init__.py b/tests/test_runner_invalid_app/__init__.py
+new file mode 100644
+index 0000000..45efd37
+--- /dev/null
++++ b/tests/test_runner_invalid_app/__init__.py
+@@ -0,0 +1,4 @@
++# Example of app layout that causes issue #12658:
++# * Both `models` and `tests` are packages.
++# * The tests raise a ImportError exception.
++# `test_runner` tests performs test discovery on this app.
+diff --git a/tests/test_runner_invalid_app/models/__init__.py b/tests/test_runner_invalid_app/models/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/test_runner_invalid_app/tests/__init__.py b/tests/test_runner_invalid_app/tests/__init__.py
+new file mode 100644
+index 0000000..b4ed718
+--- /dev/null
++++ b/tests/test_runner_invalid_app/tests/__init__.py
+@@ -0,0 +1,4 @@
++# Tests that raise ImportError should not fail silently.
++# This is a support fixture for one test case in test_runner
++
++raise ImportError
+diff --git a/tests/utils_tests/tests.py b/tests/utils_tests/tests.py
+deleted file mode 100644
+index 8d7fda4..0000000
+--- a/tests/utils_tests/tests.py
++++ /dev/null
+@@ -1,34 +0,0 @@
+-"""
+-Tests for django.utils.
+-"""
+-from __future__ import absolute_import
+-
+-from .test_archive import TestBzip2Tar, TestGzipTar, TestTar, TestZip
+-from .test_baseconv import TestBaseConv
+-from .test_checksums import TestUtilsChecksums
+-from .test_crypto import TestUtilsCryptoMisc, TestUtilsCryptoPBKDF2
+-from .test_datastructures import (DictWrapperTests, ImmutableListTests,
+-    MergeDictTests, MultiValueDictTests, SortedDictTests)
+-from .test_dateformat import DateFormatTests
+-from .test_dateparse import DateParseTests
+-from .test_datetime_safe import DatetimeTests
+-from .test_decorators import DecoratorFromMiddlewareTests
+-from .test_encoding import TestEncodingUtils
+-from .test_feedgenerator import FeedgeneratorTest
+-from .test_functional import FunctionalTestCase
+-from .test_html import TestUtilsHtml
+-from .test_http import TestUtilsHttp, ETagProcessingTests, HttpDateProcessingTests
+-from .test_itercompat import TestIsIterator
+-from .test_ipv6 import TestUtilsIPv6
+-from .test_jslex import JsToCForGettextTest, JsTokensTest
+-from .test_module_loading import (CustomLoader, DefaultLoader, EggLoader,
+-    ModuleImportTestCase)
+-from .test_numberformat import TestNumberFormat
+-from .test_os_utils import SafeJoinTests
+-from .test_regex_helper import NormalizeTests
+-from .test_simplelazyobject import TestUtilsSimpleLazyObject
+-from .test_termcolors import TermColorTests
+-from .test_text import TestUtilsText
+-from .test_timesince import TimesinceTests
+-from .test_timezone import TimezoneTests
+-from .test_tzinfo import TzinfoTests
+diff --git a/tests/validation/tests.py b/tests/validation/tests.py
+index ead1b57..b571e0c 100644
+--- a/tests/validation/tests.py
++++ b/tests/validation/tests.py
+@@ -8,12 +8,6 @@ from . import ValidationTestCase
+ from .models import (Author, Article, ModelToValidate,
+     GenericIPAddressTestModel, GenericIPAddrUnpackUniqueTest)
+ 
+-# Import other tests for this package.
+-from .test_custom_messages import CustomMessagesTest
+-from .test_error_messages import ValidationMessagesTest
+-from .test_unique import GetUniqueCheckTests, PerformUniqueChecksTest
+-from .test_validators import TestModelsWithValidators
+-
+ 
+ class BaseModelValidationTests(ValidationTestCase):
+ 
+

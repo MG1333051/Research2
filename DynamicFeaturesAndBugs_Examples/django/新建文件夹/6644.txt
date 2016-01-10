@@ -1,0 +1,2668 @@
+commit a13de6cd76b12da0520ddccb2d746dd73eb70d28
+Author: Jannis Leidel <jannis@leidel.info>
+Date:   Sat Aug 13 13:51:34 2011 +0000
+
+    Fixed #6644 -- Fixed django.contrib.formtools tests to be better isolated when running outside of the Django test suite. Also moved around the new wizard's templates a bit to better fit the common app layout.
+    
+    git-svn-id: http://code.djangoproject.com/svn/django/trunk@16616 bcc190cf-cafb-0310-a4f2-bffc1f526a37
+
+diff --git a/django/contrib/formtools/templates/formtools/wizard/wizard_form.html b/django/contrib/formtools/templates/formtools/wizard/wizard_form.html
+new file mode 100644
+index 0000000..b98e58d
+--- /dev/null
++++ b/django/contrib/formtools/templates/formtools/wizard/wizard_form.html
+@@ -0,0 +1,17 @@
++{% load i18n %}
++{% csrf_token %}
++{{ wizard.management_form }}
++{% if wizard.form.forms %}
++    {{ wizard.form.management_form }}
++    {% for form in wizard.form.forms %}
++        {{ form.as_p }}
++    {% endfor %}
++{% else %}
++    {{ wizard.form.as_p }}
++{% endif %}
++
++{% if wizard.steps.prev %}
++<button name="wizard_prev_step" value="{{ wizard.steps.first }}">{% trans "first step" %}</button>
++<button name="wizard_prev_step" value="{{ wizard.steps.prev }}">{% trans "prev step" %}</button>
++{% endif %}
++<input type="submit" name="submit" value="{% trans "submit" %}" />
+diff --git a/django/contrib/formtools/tests/__init__.py b/django/contrib/formtools/tests/__init__.py
+index 7084386..25a55a4 100644
+--- a/django/contrib/formtools/tests/__init__.py
++++ b/django/contrib/formtools/tests/__init__.py
+@@ -4,12 +4,13 @@ import warnings
+ 
+ from django import http
+ from django.conf import settings
+-from django.contrib.formtools import preview, wizard, utils
++from django.contrib.formtools import preview, utils
++from django.contrib.formtools.wizard import FormWizard
+ from django.test import TestCase
+ from django.test.utils import get_warnings_state, restore_warnings_state
+ from django.utils import unittest
+ 
+-from django.contrib.formtools.wizard.tests import *
++from django.contrib.formtools.tests.wizard import *
+ from django.contrib.formtools.tests.forms import *
+ 
+ warnings.filterwarnings('ignore', category=PendingDeprecationWarning,
+@@ -30,10 +31,22 @@ class TestFormPreview(preview.FormPreview):
+         return http.HttpResponse(success_string)
+ 
+ 
+-class PreviewTests(TestCase):
++class FormToolsTestCase(TestCase):
++    def setUp(self):
++        # in the test runner use templates/tests/ to provide base.html
++        self.old_TEMPLATE_DIRS = settings.TEMPLATE_DIRS
++        settings.TEMPLATE_DIRS = list(settings.TEMPLATE_DIRS) + [
++            os.path.join(os.path.dirname(__file__), 'templates')]
++
++    def tearDown(self):
++        settings.TEMPLATE_DIRS = self.old_TEMPLATE_DIRS
++
++
++class PreviewTests(FormToolsTestCase):
+     urls = 'django.contrib.formtools.tests.urls'
+ 
+     def setUp(self):
++        super(PreviewTests, self).setUp()
+         self.save_warnings_state()
+         warnings.filterwarnings('ignore', category=DeprecationWarning,
+                                 module='django.contrib.formtools.utils')
+@@ -45,6 +58,7 @@ class PreviewTests(TestCase):
+         self.test_data = {'field1':u'foo', 'field1_':u'asdf'}
+ 
+     def tearDown(self):
++        super(PreviewTests, self).tearDown()
+         self.restore_warnings_state()
+ 
+     def test_unused_name(self):
+@@ -224,7 +238,7 @@ class FormHmacTests(unittest.TestCase):
+ # FormWizard tests
+ #
+ 
+-class TestWizardClass(wizard.FormWizard):
++class TestWizardClass(FormWizard):
+ 
+     def get_template(self, step):
+         return 'forms/wizard.html'
+@@ -243,7 +257,7 @@ class DummyRequest(http.HttpRequest):
+         self._dont_enforce_csrf_checks = True
+ 
+ 
+-class WizardTests(TestCase):
++class WizardTests(FormToolsTestCase):
+     urls = 'django.contrib.formtools.tests.urls'
+     input_re = re.compile('name="([^"]+)" value="([^"]+)"')
+     wizard_step_data = (
+@@ -261,19 +275,13 @@ class WizardTests(TestCase):
+     )
+ 
+     def setUp(self):
+-        self.old_TEMPLATE_DIRS = settings.TEMPLATE_DIRS
+-        settings.TEMPLATE_DIRS = (
+-            os.path.join(
+-                os.path.dirname(__file__),
+-                'templates'
+-            ),
+-        )
++        super(WizardTests, self).setUp()
+         # Use a known SECRET_KEY to make security_hash tests deterministic
+         self.old_SECRET_KEY = settings.SECRET_KEY
+         settings.SECRET_KEY = "123"
+ 
+     def tearDown(self):
+-        settings.TEMPLATE_DIRS = self.old_TEMPLATE_DIRS
++        super(WizardTests, self).tearDown()
+         settings.SECRET_KEY = self.old_SECRET_KEY
+ 
+     def test_step_starts_at_zero(self):
+diff --git a/django/contrib/formtools/tests/forms.py b/django/contrib/formtools/tests/forms.py
+index 93bad92..9f6f596 100644
+--- a/django/contrib/formtools/tests/forms.py
++++ b/django/contrib/formtools/tests/forms.py
+@@ -9,10 +9,10 @@ class Page1(forms.Form):
+ class Page2(forms.Form):
+     address1 = forms.CharField(max_length=100)
+     address2 = forms.CharField(max_length=100)
+-    
++
+ class Page3(forms.Form):
+     random_crap = forms.CharField(max_length=100)
+-    
++
+ class ContactWizard(FormWizard):
+     def done(self, request, form_list):
+         return HttpResponse("")
+diff --git a/django/contrib/formtools/tests/templates/base.html b/django/contrib/formtools/tests/templates/base.html
+new file mode 100644
+index 0000000..c6afe66
+--- /dev/null
++++ b/django/contrib/formtools/tests/templates/base.html
+@@ -0,0 +1,2 @@
++{% block content %}
++{% endblock %}
+\ No newline at end of file
+diff --git a/django/contrib/formtools/tests/wizard/__init__.py b/django/contrib/formtools/tests/wizard/__init__.py
+new file mode 100644
+index 0000000..dce2fed
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/__init__.py
+@@ -0,0 +1,17 @@
++from django.contrib.formtools.tests.wizard.cookiestorage import TestCookieStorage
++from django.contrib.formtools.tests.wizard.forms import FormTests, SessionFormTests, CookieFormTests
++from django.contrib.formtools.tests.wizard.loadstorage import TestLoadStorage
++from django.contrib.formtools.tests.wizard.namedwizardtests.tests import (
++    NamedSessionWizardTests,
++    NamedCookieWizardTests,
++    TestNamedUrlSessionFormWizard,
++    TestNamedUrlCookieFormWizard,
++    NamedSessionFormTests,
++    NamedCookieFormTests,
++)
++from django.contrib.formtools.tests.wizard.sessionstorage import TestSessionStorage
++from django.contrib.formtools.tests.wizard.wizardtests.tests import (
++    SessionWizardTests,
++    CookieWizardTests,
++    WizardTestKwargs,
++)
+diff --git a/django/contrib/formtools/tests/wizard/cookiestorage.py b/django/contrib/formtools/tests/wizard/cookiestorage.py
+new file mode 100644
+index 0000000..495d3af
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/cookiestorage.py
+@@ -0,0 +1,44 @@
++from django.test import TestCase
++from django.core import signing
++from django.core.exceptions import SuspiciousOperation
++from django.http import HttpResponse
++
++from django.contrib.formtools.wizard.storage.cookie import CookieStorage
++from django.contrib.formtools.tests.wizard.storage import get_request, TestStorage
++
++
++class TestCookieStorage(TestStorage, TestCase):
++    def get_storage(self):
++        return CookieStorage
++
++    def test_manipulated_cookie(self):
++        request = get_request()
++        storage = self.get_storage()('wizard1', request, None)
++
++        cookie_signer = signing.get_cookie_signer(storage.prefix)
++
++        storage.request.COOKIES[storage.prefix] = cookie_signer.sign(
++            storage.encoder.encode({'key1': 'value1'}))
++
++        self.assertEqual(storage.load_data(), {'key1': 'value1'})
++
++        storage.request.COOKIES[storage.prefix] = 'i_am_manipulated'
++        self.assertRaises(SuspiciousOperation, storage.load_data)
++
++    def test_reset_cookie(self):
++        request = get_request()
++        storage = self.get_storage()('wizard1', request, None)
++
++        storage.data = {'key1': 'value1'}
++
++        response = HttpResponse()
++        storage.update_response(response)
++
++        cookie_signer = signing.get_cookie_signer(storage.prefix)
++        signed_cookie_data = cookie_signer.sign(storage.encoder.encode(storage.data))
++        self.assertEqual(response.cookies[storage.prefix].value, signed_cookie_data)
++
++        storage.init_data()
++        storage.update_response(response)
++        unsigned_cookie_data = cookie_signer.unsign(response.cookies[storage.prefix].value)
++        self.assertEqual(unsigned_cookie_data, '{"step_files":{},"step":null,"extra_data":{},"step_data":{}}')
+diff --git a/django/contrib/formtools/tests/wizard/forms.py b/django/contrib/formtools/tests/wizard/forms.py
+new file mode 100644
+index 0000000..8afbd30
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/forms.py
+@@ -0,0 +1,205 @@
++from django import forms, http
++from django.conf import settings
++from django.test import TestCase
++from django.template.response import TemplateResponse
++from django.utils.importlib import import_module
++
++from django.contrib.auth.models import User
++
++from django.contrib.formtools.wizard.views import (WizardView,
++                                                   SessionWizardView,
++                                                   CookieWizardView)
++
++
++class DummyRequest(http.HttpRequest):
++    def __init__(self, POST=None):
++        super(DummyRequest, self).__init__()
++        self.method = POST and "POST" or "GET"
++        if POST is not None:
++            self.POST.update(POST)
++        self.session = {}
++        self._dont_enforce_csrf_checks = True
++
++
++def get_request(*args, **kwargs):
++    request = DummyRequest(*args, **kwargs)
++    engine = import_module(settings.SESSION_ENGINE)
++    request.session = engine.SessionStore(None)
++    return request
++
++class Step1(forms.Form):
++    name = forms.CharField()
++
++class Step2(forms.Form):
++    name = forms.CharField()
++
++class Step3(forms.Form):
++    data = forms.CharField()
++
++class CustomKwargsStep1(Step1):
++
++    def __init__(self, test=None, *args, **kwargs):
++        self.test = test
++        return super(CustomKwargsStep1, self).__init__(*args, **kwargs)
++
++class UserForm(forms.ModelForm):
++    class Meta:
++        model = User
++
++UserFormSet = forms.models.modelformset_factory(User, form=UserForm, extra=2)
++
++class TestWizard(WizardView):
++    storage_name = 'django.contrib.formtools.wizard.storage.session.SessionStorage'
++
++    def dispatch(self, request, *args, **kwargs):
++        response = super(TestWizard, self).dispatch(request, *args, **kwargs)
++        return response, self
++
++    def get_form_kwargs(self, step, *args, **kwargs):
++        kwargs = super(TestWizard, self).get_form_kwargs(step, *args, **kwargs)
++        if step == 'kwargs_test':
++            kwargs['test'] = True
++        return kwargs
++
++class FormTests(TestCase):
++    def test_form_init(self):
++        testform = TestWizard.get_initkwargs([Step1, Step2])
++        self.assertEqual(testform['form_list'], {u'0': Step1, u'1': Step2})
++
++        testform = TestWizard.get_initkwargs([('start', Step1), ('step2', Step2)])
++        self.assertEqual(
++            testform['form_list'], {u'start': Step1, u'step2': Step2})
++
++        testform = TestWizard.get_initkwargs([Step1, Step2, ('finish', Step3)])
++        self.assertEqual(
++            testform['form_list'], {u'0': Step1, u'1': Step2, u'finish': Step3})
++
++    def test_first_step(self):
++        request = get_request()
++
++        testform = TestWizard.as_view([Step1, Step2])
++        response, instance = testform(request)
++        self.assertEqual(instance.steps.current, u'0')
++
++        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
++        response, instance = testform(request)
++
++        self.assertEqual(instance.steps.current, 'start')
++
++    def test_persistence(self):
++        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
++        request = get_request({'test_wizard-current_step': 'start',
++                               'name': 'data1'})
++        response, instance = testform(request)
++        self.assertEqual(instance.steps.current, 'start')
++
++        instance.storage.current_step = 'step2'
++
++        testform2 = TestWizard.as_view([('start', Step1), ('step2', Step2)])
++        request.POST = {'test_wizard-current_step': 'step2'}
++        response, instance = testform2(request)
++        self.assertEqual(instance.steps.current, 'step2')
++
++    def test_form_condition(self):
++        request = get_request()
++
++        testform = TestWizard.as_view(
++            [('start', Step1), ('step2', Step2), ('step3', Step3)],
++            condition_dict={'step2': True})
++        response, instance = testform(request)
++        self.assertEqual(instance.get_next_step(), 'step2')
++
++        testform = TestWizard.as_view(
++            [('start', Step1), ('step2', Step2), ('step3', Step3)],
++            condition_dict={'step2': False})
++        response, instance = testform(request)
++        self.assertEqual(instance.get_next_step(), 'step3')
++
++    def test_form_kwargs(self):
++        request = get_request()
++
++        testform = TestWizard.as_view([('start', Step1),
++            ('kwargs_test', CustomKwargsStep1)])
++        response, instance = testform(request)
++
++        self.assertEqual(instance.get_form_kwargs('start'), {})
++        self.assertEqual(instance.get_form_kwargs('kwargs_test'), {'test': True})
++        self.assertEqual(instance.get_form('kwargs_test').test, True)
++
++    def test_form_prefix(self):
++        request = get_request()
++
++        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
++        response, instance = testform(request)
++
++        self.assertEqual(instance.get_form_prefix(), 'start')
++        self.assertEqual(instance.get_form_prefix('another'), 'another')
++
++    def test_form_initial(self):
++        request = get_request()
++
++        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)],
++            initial_dict={'start': {'name': 'value1'}})
++        response, instance = testform(request)
++
++        self.assertEqual(instance.get_form_initial('start'), {'name': 'value1'})
++        self.assertEqual(instance.get_form_initial('step2'), {})
++
++    def test_form_instance(self):
++        request = get_request()
++        the_instance = User()
++        testform = TestWizard.as_view([('start', UserForm), ('step2', Step2)],
++            instance_dict={'start': the_instance})
++        response, instance = testform(request)
++
++        self.assertEqual(
++            instance.get_form_instance('start'),
++            the_instance)
++        self.assertEqual(
++            instance.get_form_instance('non_exist_instance'),
++            None)
++
++    def test_formset_instance(self):
++        request = get_request()
++        the_instance1, created = User.objects.get_or_create(
++            username='testuser1')
++        the_instance2, created = User.objects.get_or_create(
++            username='testuser2')
++        testform = TestWizard.as_view([('start', UserFormSet), ('step2', Step2)],
++            instance_dict={'start': User.objects.filter(username='testuser1')})
++        response, instance = testform(request)
++
++        self.assertEqual(list(instance.get_form_instance('start')), [the_instance1])
++        self.assertEqual(instance.get_form_instance('non_exist_instance'), None)
++
++        self.assertEqual(instance.get_form().initial_form_count(), 1)
++
++    def test_done(self):
++        request = get_request()
++
++        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
++        response, instance = testform(request)
++
++        self.assertRaises(NotImplementedError, instance.done, None)
++
++    def test_revalidation(self):
++        request = get_request()
++
++        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
++        response, instance = testform(request)
++        instance.render_done(None)
++        self.assertEqual(instance.storage.current_step, 'start')
++
++
++class SessionFormTests(TestCase):
++    def test_init(self):
++        request = get_request()
++        testform = SessionWizardView.as_view([('start', Step1)])
++        self.assertTrue(isinstance(testform(request), TemplateResponse))           ####################isinstance
++
++
++class CookieFormTests(TestCase):
++    def test_init(self):
++        request = get_request()
++        testform = CookieWizardView.as_view([('start', Step1)])
++        self.assertTrue(isinstance(testform(request), TemplateResponse))          ####################isinstance
+diff --git a/django/contrib/formtools/tests/wizard/loadstorage.py b/django/contrib/formtools/tests/wizard/loadstorage.py
+new file mode 100644
+index 0000000..267dee0
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/loadstorage.py
+@@ -0,0 +1,22 @@
++from django.test import TestCase
++
++from django.contrib.formtools.wizard.storage import (get_storage,
++                                                     MissingStorageModule,
++                                                     MissingStorageClass)
++from django.contrib.formtools.wizard.storage.base import BaseStorage
++
++
++class TestLoadStorage(TestCase):
++    def test_load_storage(self):
++        self.assertEqual(
++            type(get_storage('django.contrib.formtools.wizard.storage.base.BaseStorage', 'wizard1')),
++            BaseStorage)
++
++    def test_missing_module(self):
++        self.assertRaises(MissingStorageModule, get_storage,
++            'django.contrib.formtools.wizard.storage.idontexist.IDontExistStorage', 'wizard1')
++
++    def test_missing_class(self):
++        self.assertRaises(MissingStorageClass, get_storage,
++            'django.contrib.formtools.wizard.storage.base.IDontExistStorage', 'wizard1')
++
+diff --git a/django/contrib/formtools/tests/wizard/namedwizardtests/__init__.py b/django/contrib/formtools/tests/wizard/namedwizardtests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/django/contrib/formtools/tests/wizard/namedwizardtests/forms.py b/django/contrib/formtools/tests/wizard/namedwizardtests/forms.py
+new file mode 100644
+index 0000000..ae98126
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/namedwizardtests/forms.py
+@@ -0,0 +1,42 @@
++from django import forms
++from django.forms.formsets import formset_factory
++from django.http import HttpResponse
++from django.template import Template, Context
++
++from django.contrib.auth.models import User
++
++from django.contrib.formtools.wizard.views import NamedUrlWizardView
++
++class Page1(forms.Form):
++    name = forms.CharField(max_length=100)
++    user = forms.ModelChoiceField(queryset=User.objects.all())
++    thirsty = forms.NullBooleanField()
++
++class Page2(forms.Form):
++    address1 = forms.CharField(max_length=100)
++    address2 = forms.CharField(max_length=100)
++
++class Page3(forms.Form):
++    random_crap = forms.CharField(max_length=100)
++
++Page4 = formset_factory(Page3, extra=2)
++
++class ContactWizard(NamedUrlWizardView):
++    def done(self, form_list, **kwargs):
++        c = Context({
++            'form_list': [x.cleaned_data for x in form_list],
++            'all_cleaned_data': self.get_all_cleaned_data()
++        })
++
++        for form in self.form_list.keys():
++            c[form] = self.get_cleaned_data_for_step(form)
++
++        c['this_will_fail'] = self.get_cleaned_data_for_step('this_will_fail')
++        return HttpResponse(Template('').render(c))
++
++class SessionContactWizard(ContactWizard):
++    storage_name = 'django.contrib.formtools.wizard.storage.session.SessionStorage'
++
++class CookieContactWizard(ContactWizard):
++    storage_name = 'django.contrib.formtools.wizard.storage.cookie.CookieStorage'
++
+diff --git a/django/contrib/formtools/tests/wizard/namedwizardtests/tests.py b/django/contrib/formtools/tests/wizard/namedwizardtests/tests.py
+new file mode 100644
+index 0000000..0f63882
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/namedwizardtests/tests.py
+@@ -0,0 +1,342 @@
++from django.core.urlresolvers import reverse
++from django.http import QueryDict
++from django.test import TestCase
++
++from django.contrib.auth.models import User
++
++from django.contrib.formtools.wizard.views import (NamedUrlSessionWizardView,
++                                                   NamedUrlCookieWizardView)
++from django.contrib.formtools.tests.wizard.forms import get_request, Step1, Step2
++
++class NamedWizardTests(object):
++    urls = 'django.contrib.formtools.tests.wizard.namedwizardtests.urls'
++
++    def setUp(self):
++        self.testuser, created = User.objects.get_or_create(username='testuser1')
++        self.wizard_step_data[0]['form1-user'] = self.testuser.pk
++
++    def test_initial_call(self):
++        response = self.client.get(reverse('%s_start' % self.wizard_urlname))
++        self.assertEqual(response.status_code, 302)
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++        wizard = response.context['wizard']
++        self.assertEqual(wizard['steps'].current, 'form1')
++        self.assertEqual(wizard['steps'].step0, 0)
++        self.assertEqual(wizard['steps'].step1, 1)
++        self.assertEqual(wizard['steps'].last, 'form4')
++        self.assertEqual(wizard['steps'].prev, None)
++        self.assertEqual(wizard['steps'].next, 'form2')
++        self.assertEqual(wizard['steps'].count, 4)
++
++    def test_initial_call_with_params(self):
++        get_params = {'getvar1': 'getval1', 'getvar2': 'getval2'}
++        response = self.client.get(reverse('%s_start' % self.wizard_urlname),
++                                   get_params)
++        self.assertEqual(response.status_code, 302)
++
++        # Test for proper redirect GET parameters
++        location = response['Location']
++        self.assertNotEqual(location.find('?'), -1)
++        querydict = QueryDict(location[location.find('?') + 1:])
++        self.assertEqual(dict(querydict.items()), get_params)
++
++    def test_form_post_error(self):
++        response = self.client.post(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
++            self.wizard_step_1_data)
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++        self.assertEqual(response.context['wizard']['form'].errors,
++                         {'name': [u'This field is required.'],
++                          'user': [u'This field is required.']})
++
++    def test_form_post_success(self):
++        response = self.client.post(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
++            self.wizard_step_data[0])
++        response = self.client.get(response['Location'])
++
++        self.assertEqual(response.status_code, 200)
++        wizard = response.context['wizard']
++        self.assertEqual(wizard['steps'].current, 'form2')
++        self.assertEqual(wizard['steps'].step0, 1)
++        self.assertEqual(wizard['steps'].prev, 'form1')
++        self.assertEqual(wizard['steps'].next, 'form3')
++
++    def test_form_stepback(self):
++        response = self.client.get(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++        response = self.client.post(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
++            self.wizard_step_data[0])
++        response = self.client.get(response['Location'])
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        response = self.client.post(
++            reverse(self.wizard_urlname, kwargs={
++                'step': response.context['wizard']['steps'].current
++            }), {'wizard_prev_step': response.context['wizard']['steps'].prev})
++        response = self.client.get(response['Location'])
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++    def test_form_jump(self):
++        response = self.client.get(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++        response = self.client.get(
++            reverse(self.wizard_urlname, kwargs={'step': 'form3'}))
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
++
++    def test_form_finish(self):
++        response = self.client.get(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[0])
++        response = self.client.get(response['Location'])
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[1])
++        response = self.client.get(response['Location'])
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[2])
++        response = self.client.get(response['Location'])
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form4')
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[3])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++
++        self.assertEqual(response.context['form_list'], [
++            {'name': u'Pony', 'thirsty': True, 'user': self.testuser},
++            {'address1': u'123 Main St', 'address2': u'Djangoland'},
++            {'random_crap': u'blah blah'},
++            [{'random_crap': u'blah blah'}, {'random_crap': u'blah blah'}]])
++
++    def test_cleaned_data(self):
++        response = self.client.get(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[0])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[1])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[2])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[3])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++
++        self.assertEqual(
++            response.context['all_cleaned_data'],
++            {'name': u'Pony', 'thirsty': True, 'user': self.testuser,
++             'address1': u'123 Main St', 'address2': u'Djangoland',
++             'random_crap': u'blah blah', 'formset-form4': [
++                 {'random_crap': u'blah blah'},
++                 {'random_crap': u'blah blah'}
++             ]})
++
++    def test_manipulated_data(self):
++        response = self.client.get(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[0])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[1])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[2])
++        loc = response['Location']
++        response = self.client.get(loc)
++        self.assertEqual(response.status_code, 200, loc)
++
++        self.client.cookies.pop('sessionid', None)
++        self.client.cookies.pop('wizard_cookie_contact_wizard', None)
++
++        response = self.client.post(
++            reverse(self.wizard_urlname,
++                    kwargs={'step': response.context['wizard']['steps'].current}),
++            self.wizard_step_data[3])
++
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++    def test_form_reset(self):
++        response = self.client.post(
++            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
++            self.wizard_step_data[0])
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        response = self.client.get(
++            '%s?reset=1' % reverse('%s_start' % self.wizard_urlname))
++        self.assertEqual(response.status_code, 302)
++
++        response = self.client.get(response['Location'])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++class NamedSessionWizardTests(NamedWizardTests, TestCase):
++    wizard_urlname = 'nwiz_session'
++    wizard_step_1_data = {
++        'session_contact_wizard-current_step': 'form1',
++    }
++    wizard_step_data = (
++        {
++            'form1-name': 'Pony',
++            'form1-thirsty': '2',
++            'session_contact_wizard-current_step': 'form1',
++        },
++        {
++            'form2-address1': '123 Main St',
++            'form2-address2': 'Djangoland',
++            'session_contact_wizard-current_step': 'form2',
++        },
++        {
++            'form3-random_crap': 'blah blah',
++            'session_contact_wizard-current_step': 'form3',
++        },
++        {
++            'form4-INITIAL_FORMS': '0',
++            'form4-TOTAL_FORMS': '2',
++            'form4-MAX_NUM_FORMS': '0',
++            'form4-0-random_crap': 'blah blah',
++            'form4-1-random_crap': 'blah blah',
++            'session_contact_wizard-current_step': 'form4',
++        }
++    )
++
++class NamedCookieWizardTests(NamedWizardTests, TestCase):
++    wizard_urlname = 'nwiz_cookie'
++    wizard_step_1_data = {
++        'cookie_contact_wizard-current_step': 'form1',
++    }
++    wizard_step_data = (
++        {
++            'form1-name': 'Pony',
++            'form1-thirsty': '2',
++            'cookie_contact_wizard-current_step': 'form1',
++        },
++        {
++            'form2-address1': '123 Main St',
++            'form2-address2': 'Djangoland',
++            'cookie_contact_wizard-current_step': 'form2',
++        },
++        {
++            'form3-random_crap': 'blah blah',
++            'cookie_contact_wizard-current_step': 'form3',
++        },
++        {
++            'form4-INITIAL_FORMS': '0',
++            'form4-TOTAL_FORMS': '2',
++            'form4-MAX_NUM_FORMS': '0',
++            'form4-0-random_crap': 'blah blah',
++            'form4-1-random_crap': 'blah blah',
++            'cookie_contact_wizard-current_step': 'form4',
++        }
++    )
++
++
++class NamedFormTests(object):
++    urls = 'django.contrib.formtools.tests.wizard.namedwizardtests.urls'
++
++    def test_revalidation(self):
++        request = get_request()
++
++        testform = self.formwizard_class.as_view(
++            [('start', Step1), ('step2', Step2)],
++            url_name=self.wizard_urlname)
++        response, instance = testform(request, step='done')
++
++        instance.render_done(None)
++        self.assertEqual(instance.storage.current_step, 'start')
++
++class TestNamedUrlSessionFormWizard(NamedUrlSessionWizardView):
++
++    def dispatch(self, request, *args, **kwargs):
++        response = super(TestNamedUrlSessionFormWizard, self).dispatch(request, *args, **kwargs)
++        return response, self
++
++class TestNamedUrlCookieFormWizard(NamedUrlCookieWizardView):
++
++    def dispatch(self, request, *args, **kwargs):
++        response = super(TestNamedUrlCookieFormWizard, self).dispatch(request, *args, **kwargs)
++        return response, self
++
++
++class NamedSessionFormTests(NamedFormTests, TestCase):
++    formwizard_class = TestNamedUrlSessionFormWizard
++    wizard_urlname = 'nwiz_session'
++
++
++class NamedCookieFormTests(NamedFormTests, TestCase):
++    formwizard_class = TestNamedUrlCookieFormWizard
++    wizard_urlname = 'nwiz_cookie'
+diff --git a/django/contrib/formtools/tests/wizard/namedwizardtests/urls.py b/django/contrib/formtools/tests/wizard/namedwizardtests/urls.py
+new file mode 100644
+index 0000000..04019d1
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/namedwizardtests/urls.py
+@@ -0,0 +1,24 @@
++from django.conf.urls.defaults import patterns, url
++from django.contrib.formtools.tests.wizard.namedwizardtests.forms import (
++    SessionContactWizard, CookieContactWizard, Page1, Page2, Page3, Page4)
++
++def get_named_session_wizard():
++    return SessionContactWizard.as_view(
++        [('form1', Page1), ('form2', Page2), ('form3', Page3), ('form4', Page4)],
++        url_name='nwiz_session',
++        done_step_name='nwiz_session_done'
++    )
++
++def get_named_cookie_wizard():
++    return CookieContactWizard.as_view(
++        [('form1', Page1), ('form2', Page2), ('form3', Page3), ('form4', Page4)],
++        url_name='nwiz_cookie',
++        done_step_name='nwiz_cookie_done'
++    )
++
++urlpatterns = patterns('',
++    url(r'^nwiz_session/(?P<step>.+)/$', get_named_session_wizard(), name='nwiz_session'),
++    url(r'^nwiz_session/$', get_named_session_wizard(), name='nwiz_session_start'),
++    url(r'^nwiz_cookie/(?P<step>.+)/$', get_named_cookie_wizard(), name='nwiz_cookie'),
++    url(r'^nwiz_cookie/$', get_named_cookie_wizard(), name='nwiz_cookie_start'),
++)
+diff --git a/django/contrib/formtools/tests/wizard/sessionstorage.py b/django/contrib/formtools/tests/wizard/sessionstorage.py
+new file mode 100644
+index 0000000..8541072
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/sessionstorage.py
+@@ -0,0 +1,9 @@
++from django.test import TestCase
++
++from django.contrib.formtools.tests.wizard.storage import TestStorage
++from django.contrib.formtools.wizard.storage.session import SessionStorage
++
++
++class TestSessionStorage(TestStorage, TestCase):
++    def get_storage(self):
++        return SessionStorage
+diff --git a/django/contrib/formtools/tests/wizard/storage.py b/django/contrib/formtools/tests/wizard/storage.py
+new file mode 100644
+index 0000000..fe1d963
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/storage.py
+@@ -0,0 +1,77 @@
++from datetime import datetime
++
++from django.http import HttpRequest
++from django.conf import settings
++from django.utils.importlib import import_module
++
++from django.contrib.auth.models import User
++
++
++def get_request():
++    request = HttpRequest()
++    engine = import_module(settings.SESSION_ENGINE)
++    request.session = engine.SessionStore(None)
++    return request
++
++
++class TestStorage(object):
++    def setUp(self):
++        self.testuser, created = User.objects.get_or_create(username='testuser1')
++
++    def test_current_step(self):
++        request = get_request()
++        storage = self.get_storage()('wizard1', request, None)
++        my_step = 2
++
++        self.assertEqual(storage.current_step, None)
++
++        storage.current_step = my_step
++        self.assertEqual(storage.current_step, my_step)
++
++        storage.reset()
++        self.assertEqual(storage.current_step, None)
++
++        storage.current_step = my_step
++        storage2 = self.get_storage()('wizard2', request, None)
++        self.assertEqual(storage2.current_step, None)
++
++    def test_step_data(self):
++        request = get_request()
++        storage = self.get_storage()('wizard1', request, None)
++        step1 = 'start'
++        step_data1 = {'field1': 'data1',
++                      'field2': 'data2',
++                      'field3': datetime.now(),
++                      'field4': self.testuser}
++
++        self.assertEqual(storage.get_step_data(step1), None)
++
++        storage.set_step_data(step1, step_data1)
++        self.assertEqual(storage.get_step_data(step1), step_data1)
++
++        storage.reset()
++        self.assertEqual(storage.get_step_data(step1), None)
++
++        storage.set_step_data(step1, step_data1)
++        storage2 = self.get_storage()('wizard2', request, None)
++        self.assertEqual(storage2.get_step_data(step1), None)
++
++    def test_extra_context(self):
++        request = get_request()
++        storage = self.get_storage()('wizard1', request, None)
++        extra_context = {'key1': 'data1',
++                         'key2': 'data2',
++                         'key3': datetime.now(),
++                         'key4': self.testuser}
++
++        self.assertEqual(storage.extra_data, {})
++
++        storage.extra_data = extra_context
++        self.assertEqual(storage.extra_data, extra_context)
++
++        storage.reset()
++        self.assertEqual(storage.extra_data, {})
++
++        storage.extra_data = extra_context
++        storage2 = self.get_storage()('wizard2', request, None)
++        self.assertEqual(storage2.extra_data, {})
+diff --git a/django/contrib/formtools/tests/wizard/wizardtests/__init__.py b/django/contrib/formtools/tests/wizard/wizardtests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/django/contrib/formtools/tests/wizard/wizardtests/forms.py b/django/contrib/formtools/tests/wizard/wizardtests/forms.py
+new file mode 100644
+index 0000000..bbc96c3
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/wizardtests/forms.py
+@@ -0,0 +1,57 @@
++import tempfile
++
++from django import forms
++from django.core.files.storage import FileSystemStorage
++from django.forms.formsets import formset_factory
++from django.http import HttpResponse
++from django.template import Template, Context
++
++from django.contrib.auth.models import User
++
++from django.contrib.formtools.wizard.views import WizardView
++
++temp_storage_location = tempfile.mkdtemp()
++temp_storage = FileSystemStorage(location=temp_storage_location)
++
++class Page1(forms.Form):
++    name = forms.CharField(max_length=100)
++    user = forms.ModelChoiceField(queryset=User.objects.all())
++    thirsty = forms.NullBooleanField()
++
++class Page2(forms.Form):
++    address1 = forms.CharField(max_length=100)
++    address2 = forms.CharField(max_length=100)
++    file1 = forms.FileField()
++
++class Page3(forms.Form):
++    random_crap = forms.CharField(max_length=100)
++
++Page4 = formset_factory(Page3, extra=2)
++
++class ContactWizard(WizardView):
++    file_storage = temp_storage
++
++    def done(self, form_list, **kwargs):
++        c = Context({
++            'form_list': [x.cleaned_data for x in form_list],
++            'all_cleaned_data': self.get_all_cleaned_data(),
++        })
++
++        for form in self.form_list.keys():
++            c[form] = self.get_cleaned_data_for_step(form)
++
++        c['this_will_fail'] = self.get_cleaned_data_for_step('this_will_fail')
++        return HttpResponse(Template('').render(c))
++
++    def get_context_data(self, form, **kwargs):
++        context = super(ContactWizard, self).get_context_data(form, **kwargs)
++        if self.storage.current_step == 'form2':
++            context.update({'another_var': True})
++        return context
++
++class SessionContactWizard(ContactWizard):
++    storage_name = 'django.contrib.formtools.wizard.storage.session.SessionStorage'
++
++class CookieContactWizard(ContactWizard):
++    storage_name = 'django.contrib.formtools.wizard.storage.cookie.CookieStorage'
++
+diff --git a/django/contrib/formtools/tests/wizard/wizardtests/templates/other_wizard_form.html b/django/contrib/formtools/tests/wizard/wizardtests/templates/other_wizard_form.html
+new file mode 100644
+index 0000000..45f812c
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/wizardtests/templates/other_wizard_form.html
+@@ -0,0 +1 @@
++{% extends "formtools/wizard/wizard_form.html" %}
+diff --git a/django/contrib/formtools/tests/wizard/wizardtests/tests.py b/django/contrib/formtools/tests/wizard/wizardtests/tests.py
+new file mode 100644
+index 0000000..9868721
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/wizardtests/tests.py
+@@ -0,0 +1,282 @@
++from __future__ import with_statement
++import os
++
++from django.test import TestCase
++from django.conf import settings
++from django.contrib.auth.models import User
++
++
++class WizardTests(object):
++    urls = 'django.contrib.formtools.tests.wizard.wizardtests.urls'
++
++    def setUp(self):
++        self.testuser, created = User.objects.get_or_create(username='testuser1')
++        self.wizard_step_data[0]['form1-user'] = self.testuser.pk
++
++    def test_initial_call(self):
++        response = self.client.get(self.wizard_url)
++        wizard = response.context['wizard']
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(wizard['steps'].current, 'form1')
++        self.assertEqual(wizard['steps'].step0, 0)
++        self.assertEqual(wizard['steps'].step1, 1)
++        self.assertEqual(wizard['steps'].last, 'form4')
++        self.assertEqual(wizard['steps'].prev, None)
++        self.assertEqual(wizard['steps'].next, 'form2')
++        self.assertEqual(wizard['steps'].count, 4)
++
++    def test_form_post_error(self):
++        response = self.client.post(self.wizard_url, self.wizard_step_1_data)
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++        self.assertEqual(response.context['wizard']['form'].errors,
++                         {'name': [u'This field is required.'],
++                          'user': [u'This field is required.']})
++
++    def test_form_post_success(self):
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        wizard = response.context['wizard']
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(wizard['steps'].current, 'form2')
++        self.assertEqual(wizard['steps'].step0, 1)
++        self.assertEqual(wizard['steps'].prev, 'form1')
++        self.assertEqual(wizard['steps'].next, 'form3')
++
++    def test_form_stepback(self):
++        response = self.client.get(self.wizard_url)
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        response = self.client.post(self.wizard_url, {
++            'wizard_prev_step': response.context['wizard']['steps'].prev})
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++    def test_template_context(self):
++        response = self.client.get(self.wizard_url)
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++        self.assertEqual(response.context.get('another_var', None), None)
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++        self.assertEqual(response.context.get('another_var', None), True)
++
++    def test_form_finish(self):
++        response = self.client.get(self.wizard_url)
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        post_data = self.wizard_step_data[1]
++        post_data['form2-file1'] = open(__file__)
++        response = self.client.post(self.wizard_url, post_data)
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form4')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
++        self.assertEqual(response.status_code, 200)
++
++        all_data = response.context['form_list']
++        self.assertEqual(all_data[1]['file1'].read(), open(__file__).read())
++        del all_data[1]['file1']
++        self.assertEqual(all_data, [
++            {'name': u'Pony', 'thirsty': True, 'user': self.testuser},
++            {'address1': u'123 Main St', 'address2': u'Djangoland'},
++            {'random_crap': u'blah blah'},
++            [{'random_crap': u'blah blah'},
++             {'random_crap': u'blah blah'}]])
++
++    def test_cleaned_data(self):
++        response = self.client.get(self.wizard_url)
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++
++        post_data = self.wizard_step_data[1]
++        post_data['form2-file1'] = open(__file__)
++        response = self.client.post(self.wizard_url, post_data)
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
++        self.assertEqual(response.status_code, 200)
++
++        all_data = response.context['all_cleaned_data']
++        self.assertEqual(all_data['file1'].read(), open(__file__).read())
++        del all_data['file1']
++        self.assertEqual(all_data, {
++            'name': u'Pony', 'thirsty': True, 'user': self.testuser,
++            'address1': u'123 Main St', 'address2': u'Djangoland',
++            'random_crap': u'blah blah', 'formset-form4': [
++                {'random_crap': u'blah blah'},
++                {'random_crap': u'blah blah'}]})
++
++    def test_manipulated_data(self):
++        response = self.client.get(self.wizard_url)
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++
++        post_data = self.wizard_step_data[1]
++        post_data['form2-file1'] = open(__file__)
++        response = self.client.post(self.wizard_url, post_data)
++        self.assertEqual(response.status_code, 200)
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
++        self.assertEqual(response.status_code, 200)
++        self.client.cookies.pop('sessionid', None)
++        self.client.cookies.pop('wizard_cookie_contact_wizard', None)
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++    def test_form_refresh(self):
++        response = self.client.get(self.wizard_url)
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        post_data = self.wizard_step_data[1]
++        post_data['form2-file1'] = open(__file__)
++        response = self.client.post(self.wizard_url, post_data)
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form4')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
++
++        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
++        self.assertEqual(response.status_code, 200)
++
++
++class SessionWizardTests(WizardTests, TestCase):
++    wizard_url = '/wiz_session/'
++    wizard_step_1_data = {
++        'session_contact_wizard-current_step': 'form1',
++    }
++    wizard_step_data = (
++        {
++            'form1-name': 'Pony',
++            'form1-thirsty': '2',
++            'session_contact_wizard-current_step': 'form1',
++        },
++        {
++            'form2-address1': '123 Main St',
++            'form2-address2': 'Djangoland',
++            'session_contact_wizard-current_step': 'form2',
++        },
++        {
++            'form3-random_crap': 'blah blah',
++            'session_contact_wizard-current_step': 'form3',
++        },
++        {
++            'form4-INITIAL_FORMS': '0',
++            'form4-TOTAL_FORMS': '2',
++            'form4-MAX_NUM_FORMS': '0',
++            'form4-0-random_crap': 'blah blah',
++            'form4-1-random_crap': 'blah blah',
++            'session_contact_wizard-current_step': 'form4',
++        }
++    )
++
++class CookieWizardTests(WizardTests, TestCase):
++    wizard_url = '/wiz_cookie/'
++    wizard_step_1_data = {
++        'cookie_contact_wizard-current_step': 'form1',
++    }
++    wizard_step_data = (
++        {
++            'form1-name': 'Pony',
++            'form1-thirsty': '2',
++            'cookie_contact_wizard-current_step': 'form1',
++        },
++        {
++            'form2-address1': '123 Main St',
++            'form2-address2': 'Djangoland',
++            'cookie_contact_wizard-current_step': 'form2',
++        },
++        {
++            'form3-random_crap': 'blah blah',
++            'cookie_contact_wizard-current_step': 'form3',
++        },
++        {
++            'form4-INITIAL_FORMS': '0',
++            'form4-TOTAL_FORMS': '2',
++            'form4-MAX_NUM_FORMS': '0',
++            'form4-0-random_crap': 'blah blah',
++            'form4-1-random_crap': 'blah blah',
++            'cookie_contact_wizard-current_step': 'form4',
++        }
++    )
++
++class WizardTestKwargs(TestCase):
++    wizard_url = '/wiz_other_template/'
++    wizard_step_1_data = {
++        'cookie_contact_wizard-current_step': 'form1',
++    }
++    wizard_step_data = (
++        {
++            'form1-name': 'Pony',
++            'form1-thirsty': '2',
++            'cookie_contact_wizard-current_step': 'form1',
++        },
++        {
++            'form2-address1': '123 Main St',
++            'form2-address2': 'Djangoland',
++            'cookie_contact_wizard-current_step': 'form2',
++        },
++        {
++            'form3-random_crap': 'blah blah',
++            'cookie_contact_wizard-current_step': 'form3',
++        },
++        {
++            'form4-INITIAL_FORMS': '0',
++            'form4-TOTAL_FORMS': '2',
++            'form4-MAX_NUM_FORMS': '0',
++            'form4-0-random_crap': 'blah blah',
++            'form4-1-random_crap': 'blah blah',
++            'cookie_contact_wizard-current_step': 'form4',
++        }
++    )
++    urls = 'django.contrib.formtools.tests.wizard.wizardtests.urls'
++
++    def setUp(self):
++        self.testuser, created = User.objects.get_or_create(username='testuser1')
++        self.wizard_step_data[0]['form1-user'] = self.testuser.pk
++
++    def test_template(self):
++        templates = os.path.join(os.path.dirname(__file__), 'templates')
++        with self.settings(
++                TEMPLATE_DIRS=list(settings.TEMPLATE_DIRS) + [templates]):
++            response = self.client.get(self.wizard_url)
++            self.assertTemplateUsed(response, 'other_wizard_form.html')
+diff --git a/django/contrib/formtools/tests/wizard/wizardtests/urls.py b/django/contrib/formtools/tests/wizard/wizardtests/urls.py
+new file mode 100644
+index 0000000..e6d18ea
+--- /dev/null
++++ b/django/contrib/formtools/tests/wizard/wizardtests/urls.py
+@@ -0,0 +1,22 @@
++from django.conf.urls.defaults import *
++from django.contrib.formtools.tests.wizard.wizardtests.forms import (
++    SessionContactWizard, CookieContactWizard, Page1, Page2, Page3, Page4)
++
++urlpatterns = patterns('',
++    url(r'^wiz_session/$', SessionContactWizard.as_view(
++        [('form1', Page1),
++         ('form2', Page2),
++         ('form3', Page3),
++         ('form4', Page4)])),
++    url(r'^wiz_cookie/$', CookieContactWizard.as_view(
++        [('form1', Page1),
++         ('form2', Page2),
++         ('form3', Page3),
++         ('form4', Page4)])),
++     url(r'^wiz_other_template/$', CookieContactWizard.as_view(
++         [('form1', Page1),
++          ('form2', Page2),
++          ('form3', Page3),
++          ('form4', Page4)],
++          template_name='other_wizard_form.html')),
++)
+diff --git a/django/contrib/formtools/wizard/templates/formtools/wizard/wizard_form.html b/django/contrib/formtools/wizard/templates/formtools/wizard/wizard_form.html
+deleted file mode 100644
+index b98e58d..0000000
+--- a/django/contrib/formtools/wizard/templates/formtools/wizard/wizard_form.html
++++ /dev/null
+@@ -1,17 +0,0 @@
+-{% load i18n %}
+-{% csrf_token %}
+-{{ wizard.management_form }}
+-{% if wizard.form.forms %}
+-    {{ wizard.form.management_form }}
+-    {% for form in wizard.form.forms %}
+-        {{ form.as_p }}
+-    {% endfor %}
+-{% else %}
+-    {{ wizard.form.as_p }}
+-{% endif %}
+-
+-{% if wizard.steps.prev %}
+-<button name="wizard_prev_step" value="{{ wizard.steps.first }}">{% trans "first step" %}</button>
+-<button name="wizard_prev_step" value="{{ wizard.steps.prev }}">{% trans "prev step" %}</button>
+-{% endif %}
+-<input type="submit" name="submit" value="{% trans "submit" %}" />
+diff --git a/django/contrib/formtools/wizard/tests/__init__.py b/django/contrib/formtools/wizard/tests/__init__.py
+deleted file mode 100644
+index 7c66c82..0000000
+--- a/django/contrib/formtools/wizard/tests/__init__.py
++++ /dev/null
+@@ -1,6 +0,0 @@
+-from django.contrib.formtools.wizard.tests.formtests import *
+-from django.contrib.formtools.wizard.tests.sessionstoragetests import *
+-from django.contrib.formtools.wizard.tests.cookiestoragetests import *
+-from django.contrib.formtools.wizard.tests.loadstoragetests import *
+-from django.contrib.formtools.wizard.tests.wizardtests import *
+-from django.contrib.formtools.wizard.tests.namedwizardtests import *
+diff --git a/django/contrib/formtools/wizard/tests/cookiestoragetests.py b/django/contrib/formtools/wizard/tests/cookiestoragetests.py
+deleted file mode 100644
+index 74c7e82..0000000
+--- a/django/contrib/formtools/wizard/tests/cookiestoragetests.py
++++ /dev/null
+@@ -1,43 +0,0 @@
+-from django.test import TestCase
+-from django.core import signing
+-from django.core.exceptions import SuspiciousOperation
+-from django.http import HttpResponse
+-
+-from django.contrib.formtools.wizard.storage.cookie import CookieStorage
+-from django.contrib.formtools.wizard.tests.storagetests import get_request, TestStorage
+-
+-class TestCookieStorage(TestStorage, TestCase):
+-    def get_storage(self):
+-        return CookieStorage
+-
+-    def test_manipulated_cookie(self):
+-        request = get_request()
+-        storage = self.get_storage()('wizard1', request, None)
+-
+-        cookie_signer = signing.get_cookie_signer(storage.prefix)
+-
+-        storage.request.COOKIES[storage.prefix] = cookie_signer.sign(
+-            storage.encoder.encode({'key1': 'value1'}))
+-
+-        self.assertEqual(storage.load_data(), {'key1': 'value1'})
+-
+-        storage.request.COOKIES[storage.prefix] = 'i_am_manipulated'
+-        self.assertRaises(SuspiciousOperation, storage.load_data)
+-
+-    def test_reset_cookie(self):
+-        request = get_request()
+-        storage = self.get_storage()('wizard1', request, None)
+-
+-        storage.data = {'key1': 'value1'}
+-
+-        response = HttpResponse()
+-        storage.update_response(response)
+-
+-        cookie_signer = signing.get_cookie_signer(storage.prefix)
+-        signed_cookie_data = cookie_signer.sign(storage.encoder.encode(storage.data))
+-        self.assertEqual(response.cookies[storage.prefix].value, signed_cookie_data)
+-
+-        storage.init_data()
+-        storage.update_response(response)
+-        unsigned_cookie_data = cookie_signer.unsign(response.cookies[storage.prefix].value)
+-        self.assertEqual(unsigned_cookie_data, '{"step_files":{},"step":null,"extra_data":{},"step_data":{}}')
+diff --git a/django/contrib/formtools/wizard/tests/formtests.py b/django/contrib/formtools/wizard/tests/formtests.py
+deleted file mode 100644
+index db0aba1..0000000
+--- a/django/contrib/formtools/wizard/tests/formtests.py
++++ /dev/null
+@@ -1,205 +0,0 @@
+-from django import forms, http
+-from django.conf import settings
+-from django.test import TestCase
+-from django.template.response import TemplateResponse
+-from django.utils.importlib import import_module
+-
+-from django.contrib.auth.models import User
+-
+-from django.contrib.formtools.wizard.views import (WizardView,
+-                                                   SessionWizardView,
+-                                                   CookieWizardView)
+-
+-
+-class DummyRequest(http.HttpRequest):
+-    def __init__(self, POST=None):
+-        super(DummyRequest, self).__init__()
+-        self.method = POST and "POST" or "GET"
+-        if POST is not None:
+-            self.POST.update(POST)
+-        self.session = {}
+-        self._dont_enforce_csrf_checks = True
+-
+-def get_request(*args, **kwargs):
+-    request = DummyRequest(*args, **kwargs)
+-    engine = import_module(settings.SESSION_ENGINE)
+-    request.session = engine.SessionStore(None)
+-    return request
+-
+-class Step1(forms.Form):
+-    name = forms.CharField()
+-
+-class Step2(forms.Form):
+-    name = forms.CharField()
+-
+-class Step3(forms.Form):
+-    data = forms.CharField()
+-
+-class CustomKwargsStep1(Step1):
+-
+-    def __init__(self, test=None, *args, **kwargs):
+-        self.test = test
+-        return super(CustomKwargsStep1, self).__init__(*args, **kwargs)
+-
+-class UserForm(forms.ModelForm):
+-    class Meta:
+-        model = User
+-
+-UserFormSet = forms.models.modelformset_factory(User, form=UserForm, extra=2)
+-
+-class TestWizard(WizardView):
+-    storage_name = 'django.contrib.formtools.wizard.storage.session.SessionStorage'
+-
+-    def dispatch(self, request, *args, **kwargs):
+-        response = super(TestWizard, self).dispatch(request, *args, **kwargs)
+-        return response, self
+-
+-    def get_form_kwargs(self, step, *args, **kwargs):
+-        kwargs = super(TestWizard, self).get_form_kwargs(step, *args, **kwargs)
+-        if step == 'kwargs_test':
+-            kwargs['test'] = True
+-        return kwargs
+-
+-class FormTests(TestCase):
+-    def test_form_init(self):
+-        testform = TestWizard.get_initkwargs([Step1, Step2])
+-        self.assertEqual(testform['form_list'], {u'0': Step1, u'1': Step2})
+-
+-        testform = TestWizard.get_initkwargs([('start', Step1), ('step2', Step2)])
+-        self.assertEqual(
+-            testform['form_list'], {u'start': Step1, u'step2': Step2})
+-
+-        testform = TestWizard.get_initkwargs([Step1, Step2, ('finish', Step3)])
+-        self.assertEqual(
+-            testform['form_list'], {u'0': Step1, u'1': Step2, u'finish': Step3})
+-
+-    def test_first_step(self):
+-        request = get_request()
+-
+-        testform = TestWizard.as_view([Step1, Step2])
+-        response, instance = testform(request)
+-        self.assertEqual(instance.steps.current, u'0')
+-
+-        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
+-        response, instance = testform(request)
+-
+-        self.assertEqual(instance.steps.current, 'start')
+-
+-    def test_persistence(self):
+-        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
+-        request = get_request({'test_wizard-current_step': 'start',
+-                               'name': 'data1'})
+-        response, instance = testform(request)
+-        self.assertEqual(instance.steps.current, 'start')
+-
+-        instance.storage.current_step = 'step2'
+-
+-        testform2 = TestWizard.as_view([('start', Step1), ('step2', Step2)])
+-        request.POST = {'test_wizard-current_step': 'step2'}
+-        response, instance = testform2(request)
+-        self.assertEqual(instance.steps.current, 'step2')
+-
+-    def test_form_condition(self):
+-        request = get_request()
+-
+-        testform = TestWizard.as_view(
+-            [('start', Step1), ('step2', Step2), ('step3', Step3)],
+-            condition_dict={'step2': True})
+-        response, instance = testform(request)
+-        self.assertEqual(instance.get_next_step(), 'step2')
+-
+-        testform = TestWizard.as_view(
+-            [('start', Step1), ('step2', Step2), ('step3', Step3)],
+-            condition_dict={'step2': False})
+-        response, instance = testform(request)
+-        self.assertEqual(instance.get_next_step(), 'step3')
+-
+-    def test_form_kwargs(self):
+-        request = get_request()
+-
+-        testform = TestWizard.as_view([('start', Step1),
+-            ('kwargs_test', CustomKwargsStep1)])
+-        response, instance = testform(request)
+-
+-        self.assertEqual(instance.get_form_kwargs('start'), {})
+-        self.assertEqual(instance.get_form_kwargs('kwargs_test'), {'test': True})
+-        self.assertEqual(instance.get_form('kwargs_test').test, True)
+-
+-    def test_form_prefix(self):
+-        request = get_request()
+-
+-        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
+-        response, instance = testform(request)
+-
+-        self.assertEqual(instance.get_form_prefix(), 'start')
+-        self.assertEqual(instance.get_form_prefix('another'), 'another')
+-
+-    def test_form_initial(self):
+-        request = get_request()
+-
+-        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)],
+-            initial_dict={'start': {'name': 'value1'}})
+-        response, instance = testform(request)
+-
+-        self.assertEqual(instance.get_form_initial('start'), {'name': 'value1'})
+-        self.assertEqual(instance.get_form_initial('step2'), {})
+-
+-    def test_form_instance(self):
+-        request = get_request()
+-        the_instance = User()
+-        testform = TestWizard.as_view([('start', UserForm), ('step2', Step2)],
+-            instance_dict={'start': the_instance})
+-        response, instance = testform(request)
+-
+-        self.assertEqual(
+-            instance.get_form_instance('start'),
+-            the_instance)
+-        self.assertEqual(
+-            instance.get_form_instance('non_exist_instance'),
+-            None)
+-
+-    def test_formset_instance(self):
+-        request = get_request()
+-        the_instance1, created = User.objects.get_or_create(
+-            username='testuser1')
+-        the_instance2, created = User.objects.get_or_create(
+-            username='testuser2')
+-        testform = TestWizard.as_view([('start', UserFormSet), ('step2', Step2)],
+-            instance_dict={'start': User.objects.filter(username='testuser1')})
+-        response, instance = testform(request)
+-
+-        self.assertEqual(list(instance.get_form_instance('start')), [the_instance1])
+-        self.assertEqual(instance.get_form_instance('non_exist_instance'), None)
+-
+-        self.assertEqual(instance.get_form().initial_form_count(), 1)
+-
+-    def test_done(self):
+-        request = get_request()
+-
+-        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
+-        response, instance = testform(request)
+-
+-        self.assertRaises(NotImplementedError, instance.done, None)
+-
+-    def test_revalidation(self):
+-        request = get_request()
+-
+-        testform = TestWizard.as_view([('start', Step1), ('step2', Step2)])
+-        response, instance = testform(request)
+-        instance.render_done(None)
+-        self.assertEqual(instance.storage.current_step, 'start')
+-
+-
+-class SessionFormTests(TestCase):
+-    def test_init(self):
+-        request = get_request()
+-        testform = SessionWizardView.as_view([('start', Step1)])
+-        self.assertTrue(isinstance(testform(request), TemplateResponse))                                ####################isinstance
+-
+-
+-class CookieFormTests(TestCase):
+-    def test_init(self):
+-        request = get_request()
+-        testform = CookieWizardView.as_view([('start', Step1)])
+-        self.assertTrue(isinstance(testform(request), TemplateResponse))                             ####################isinstance
+-
+diff --git a/django/contrib/formtools/wizard/tests/loadstoragetests.py b/django/contrib/formtools/wizard/tests/loadstoragetests.py
+deleted file mode 100644
+index 267dee0..0000000
+--- a/django/contrib/formtools/wizard/tests/loadstoragetests.py
++++ /dev/null
+@@ -1,22 +0,0 @@
+-from django.test import TestCase
+-
+-from django.contrib.formtools.wizard.storage import (get_storage,
+-                                                     MissingStorageModule,
+-                                                     MissingStorageClass)
+-from django.contrib.formtools.wizard.storage.base import BaseStorage
+-
+-
+-class TestLoadStorage(TestCase):
+-    def test_load_storage(self):
+-        self.assertEqual(
+-            type(get_storage('django.contrib.formtools.wizard.storage.base.BaseStorage', 'wizard1')),
+-            BaseStorage)
+-
+-    def test_missing_module(self):
+-        self.assertRaises(MissingStorageModule, get_storage,
+-            'django.contrib.formtools.wizard.storage.idontexist.IDontExistStorage', 'wizard1')
+-
+-    def test_missing_class(self):
+-        self.assertRaises(MissingStorageClass, get_storage,
+-            'django.contrib.formtools.wizard.storage.base.IDontExistStorage', 'wizard1')
+-
+diff --git a/django/contrib/formtools/wizard/tests/namedwizardtests/__init__.py b/django/contrib/formtools/wizard/tests/namedwizardtests/__init__.py
+deleted file mode 100644
+index 4387356..0000000
+--- a/django/contrib/formtools/wizard/tests/namedwizardtests/__init__.py
++++ /dev/null
+@@ -1 +0,0 @@
+-from django.contrib.formtools.wizard.tests.namedwizardtests.tests import *
+\ No newline at end of file
+diff --git a/django/contrib/formtools/wizard/tests/namedwizardtests/forms.py b/django/contrib/formtools/wizard/tests/namedwizardtests/forms.py
+deleted file mode 100644
+index ae98126..0000000
+--- a/django/contrib/formtools/wizard/tests/namedwizardtests/forms.py
++++ /dev/null
+@@ -1,42 +0,0 @@
+-from django import forms
+-from django.forms.formsets import formset_factory
+-from django.http import HttpResponse
+-from django.template import Template, Context
+-
+-from django.contrib.auth.models import User
+-
+-from django.contrib.formtools.wizard.views import NamedUrlWizardView
+-
+-class Page1(forms.Form):
+-    name = forms.CharField(max_length=100)
+-    user = forms.ModelChoiceField(queryset=User.objects.all())
+-    thirsty = forms.NullBooleanField()
+-
+-class Page2(forms.Form):
+-    address1 = forms.CharField(max_length=100)
+-    address2 = forms.CharField(max_length=100)
+-
+-class Page3(forms.Form):
+-    random_crap = forms.CharField(max_length=100)
+-
+-Page4 = formset_factory(Page3, extra=2)
+-
+-class ContactWizard(NamedUrlWizardView):
+-    def done(self, form_list, **kwargs):
+-        c = Context({
+-            'form_list': [x.cleaned_data for x in form_list],
+-            'all_cleaned_data': self.get_all_cleaned_data()
+-        })
+-
+-        for form in self.form_list.keys():
+-            c[form] = self.get_cleaned_data_for_step(form)
+-
+-        c['this_will_fail'] = self.get_cleaned_data_for_step('this_will_fail')
+-        return HttpResponse(Template('').render(c))
+-
+-class SessionContactWizard(ContactWizard):
+-    storage_name = 'django.contrib.formtools.wizard.storage.session.SessionStorage'
+-
+-class CookieContactWizard(ContactWizard):
+-    storage_name = 'django.contrib.formtools.wizard.storage.cookie.CookieStorage'
+-
+diff --git a/django/contrib/formtools/wizard/tests/namedwizardtests/tests.py b/django/contrib/formtools/wizard/tests/namedwizardtests/tests.py
+deleted file mode 100644
+index b3fb290..0000000
+--- a/django/contrib/formtools/wizard/tests/namedwizardtests/tests.py
++++ /dev/null
+@@ -1,346 +0,0 @@
+-from django.core.urlresolvers import reverse
+-from django.http import QueryDict
+-from django.test import TestCase
+-
+-from django.contrib.auth.models import User
+-
+-from django.contrib.formtools import wizard
+-
+-from django.contrib.formtools.wizard.views import (NamedUrlSessionWizardView,
+-                                                   NamedUrlCookieWizardView)
+-from django.contrib.formtools.wizard.tests.formtests import (get_request,
+-                                                             Step1,
+-                                                             Step2)
+-
+-class NamedWizardTests(object):
+-    urls = 'django.contrib.formtools.wizard.tests.namedwizardtests.urls'
+-
+-    def setUp(self):
+-        self.testuser, created = User.objects.get_or_create(username='testuser1')
+-        self.wizard_step_data[0]['form1-user'] = self.testuser.pk
+-
+-    def test_initial_call(self):
+-        response = self.client.get(reverse('%s_start' % self.wizard_urlname))
+-        self.assertEqual(response.status_code, 302)
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-        wizard = response.context['wizard']
+-        self.assertEqual(wizard['steps'].current, 'form1')
+-        self.assertEqual(wizard['steps'].step0, 0)
+-        self.assertEqual(wizard['steps'].step1, 1)
+-        self.assertEqual(wizard['steps'].last, 'form4')
+-        self.assertEqual(wizard['steps'].prev, None)
+-        self.assertEqual(wizard['steps'].next, 'form2')
+-        self.assertEqual(wizard['steps'].count, 4)
+-
+-    def test_initial_call_with_params(self):
+-        get_params = {'getvar1': 'getval1', 'getvar2': 'getval2'}
+-        response = self.client.get(reverse('%s_start' % self.wizard_urlname),
+-                                   get_params)
+-        self.assertEqual(response.status_code, 302)
+-
+-        # Test for proper redirect GET parameters
+-        location = response['Location']
+-        self.assertNotEqual(location.find('?'), -1)
+-        querydict = QueryDict(location[location.find('?') + 1:])
+-        self.assertEqual(dict(querydict.items()), get_params)
+-
+-    def test_form_post_error(self):
+-        response = self.client.post(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
+-            self.wizard_step_1_data)
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-        self.assertEqual(response.context['wizard']['form'].errors,
+-                         {'name': [u'This field is required.'],
+-                          'user': [u'This field is required.']})
+-
+-    def test_form_post_success(self):
+-        response = self.client.post(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
+-            self.wizard_step_data[0])
+-        response = self.client.get(response['Location'])
+-
+-        self.assertEqual(response.status_code, 200)
+-        wizard = response.context['wizard']
+-        self.assertEqual(wizard['steps'].current, 'form2')
+-        self.assertEqual(wizard['steps'].step0, 1)
+-        self.assertEqual(wizard['steps'].prev, 'form1')
+-        self.assertEqual(wizard['steps'].next, 'form3')
+-
+-    def test_form_stepback(self):
+-        response = self.client.get(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
+-            self.wizard_step_data[0])
+-        response = self.client.get(response['Location'])
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname, kwargs={
+-                'step': response.context['wizard']['steps'].current
+-            }), {'wizard_prev_step': response.context['wizard']['steps'].prev})
+-        response = self.client.get(response['Location'])
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-    def test_form_jump(self):
+-        response = self.client.get(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-        response = self.client.get(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form3'}))
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
+-
+-    def test_form_finish(self):
+-        response = self.client.get(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[0])
+-        response = self.client.get(response['Location'])
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[1])
+-        response = self.client.get(response['Location'])
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[2])
+-        response = self.client.get(response['Location'])
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form4')
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[3])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-
+-        self.assertEqual(response.context['form_list'], [
+-            {'name': u'Pony', 'thirsty': True, 'user': self.testuser},
+-            {'address1': u'123 Main St', 'address2': u'Djangoland'},
+-            {'random_crap': u'blah blah'},
+-            [{'random_crap': u'blah blah'}, {'random_crap': u'blah blah'}]])
+-
+-    def test_cleaned_data(self):
+-        response = self.client.get(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[0])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[1])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[2])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[3])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-
+-        self.assertEqual(
+-            response.context['all_cleaned_data'],
+-            {'name': u'Pony', 'thirsty': True, 'user': self.testuser,
+-             'address1': u'123 Main St', 'address2': u'Djangoland',
+-             'random_crap': u'blah blah', 'formset-form4': [
+-                 {'random_crap': u'blah blah'},
+-                 {'random_crap': u'blah blah'}
+-             ]})
+-
+-    def test_manipulated_data(self):
+-        response = self.client.get(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}))
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[0])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[1])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[2])
+-        loc = response['Location']
+-        response = self.client.get(loc)
+-        self.assertEqual(response.status_code, 200, loc)
+-
+-        self.client.cookies.pop('sessionid', None)
+-        self.client.cookies.pop('wizard_cookie_contact_wizard', None)
+-
+-        response = self.client.post(
+-            reverse(self.wizard_urlname,
+-                    kwargs={'step': response.context['wizard']['steps'].current}),
+-            self.wizard_step_data[3])
+-
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-    def test_form_reset(self):
+-        response = self.client.post(
+-            reverse(self.wizard_urlname, kwargs={'step': 'form1'}),
+-            self.wizard_step_data[0])
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        response = self.client.get(
+-            '%s?reset=1' % reverse('%s_start' % self.wizard_urlname))
+-        self.assertEqual(response.status_code, 302)
+-
+-        response = self.client.get(response['Location'])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-class NamedSessionWizardTests(NamedWizardTests, TestCase):
+-    wizard_urlname = 'nwiz_session'
+-    wizard_step_1_data = {
+-        'session_contact_wizard-current_step': 'form1',
+-    }
+-    wizard_step_data = (
+-        {
+-            'form1-name': 'Pony',
+-            'form1-thirsty': '2',
+-            'session_contact_wizard-current_step': 'form1',
+-        },
+-        {
+-            'form2-address1': '123 Main St',
+-            'form2-address2': 'Djangoland',
+-            'session_contact_wizard-current_step': 'form2',
+-        },
+-        {
+-            'form3-random_crap': 'blah blah',
+-            'session_contact_wizard-current_step': 'form3',
+-        },
+-        {
+-            'form4-INITIAL_FORMS': '0',
+-            'form4-TOTAL_FORMS': '2',
+-            'form4-MAX_NUM_FORMS': '0',
+-            'form4-0-random_crap': 'blah blah',
+-            'form4-1-random_crap': 'blah blah',
+-            'session_contact_wizard-current_step': 'form4',
+-        }
+-    )
+-
+-class NamedCookieWizardTests(NamedWizardTests, TestCase):
+-    wizard_urlname = 'nwiz_cookie'
+-    wizard_step_1_data = {
+-        'cookie_contact_wizard-current_step': 'form1',
+-    }
+-    wizard_step_data = (
+-        {
+-            'form1-name': 'Pony',
+-            'form1-thirsty': '2',
+-            'cookie_contact_wizard-current_step': 'form1',
+-        },
+-        {
+-            'form2-address1': '123 Main St',
+-            'form2-address2': 'Djangoland',
+-            'cookie_contact_wizard-current_step': 'form2',
+-        },
+-        {
+-            'form3-random_crap': 'blah blah',
+-            'cookie_contact_wizard-current_step': 'form3',
+-        },
+-        {
+-            'form4-INITIAL_FORMS': '0',
+-            'form4-TOTAL_FORMS': '2',
+-            'form4-MAX_NUM_FORMS': '0',
+-            'form4-0-random_crap': 'blah blah',
+-            'form4-1-random_crap': 'blah blah',
+-            'cookie_contact_wizard-current_step': 'form4',
+-        }
+-    )
+-
+-
+-class NamedFormTests(object):
+-    urls = 'django.contrib.formtools.wizard.tests.namedwizardtests.urls'
+-
+-    def test_revalidation(self):
+-        request = get_request()
+-
+-        testform = self.formwizard_class.as_view(
+-            [('start', Step1), ('step2', Step2)],
+-            url_name=self.wizard_urlname)
+-        response, instance = testform(request, step='done')
+-
+-        instance.render_done(None)
+-        self.assertEqual(instance.storage.current_step, 'start')
+-
+-class TestNamedUrlSessionFormWizard(NamedUrlSessionWizardView):
+-
+-    def dispatch(self, request, *args, **kwargs):
+-        response = super(TestNamedUrlSessionFormWizard, self).dispatch(request, *args, **kwargs)
+-        return response, self
+-
+-class TestNamedUrlCookieFormWizard(NamedUrlCookieWizardView):
+-
+-    def dispatch(self, request, *args, **kwargs):
+-        response = super(TestNamedUrlCookieFormWizard, self).dispatch(request, *args, **kwargs)
+-        return response, self
+-
+-
+-class NamedSessionFormTests(NamedFormTests, TestCase):
+-    formwizard_class = TestNamedUrlSessionFormWizard
+-    wizard_urlname = 'nwiz_session'
+-
+-
+-class NamedCookieFormTests(NamedFormTests, TestCase):
+-    formwizard_class = TestNamedUrlCookieFormWizard
+-    wizard_urlname = 'nwiz_cookie'
+diff --git a/django/contrib/formtools/wizard/tests/namedwizardtests/urls.py b/django/contrib/formtools/wizard/tests/namedwizardtests/urls.py
+deleted file mode 100644
+index a97ca98..0000000
+--- a/django/contrib/formtools/wizard/tests/namedwizardtests/urls.py
++++ /dev/null
+@@ -1,24 +0,0 @@
+-from django.conf.urls.defaults import *
+-from django.contrib.formtools.wizard.tests.namedwizardtests.forms import (
+-    SessionContactWizard, CookieContactWizard, Page1, Page2, Page3, Page4)
+-
+-def get_named_session_wizard():
+-    return SessionContactWizard.as_view(
+-        [('form1', Page1), ('form2', Page2), ('form3', Page3), ('form4', Page4)],
+-        url_name='nwiz_session',
+-        done_step_name='nwiz_session_done'
+-    )
+-
+-def get_named_cookie_wizard():
+-    return CookieContactWizard.as_view(
+-        [('form1', Page1), ('form2', Page2), ('form3', Page3), ('form4', Page4)],
+-        url_name='nwiz_cookie',
+-        done_step_name='nwiz_cookie_done'
+-    )
+-
+-urlpatterns = patterns('',
+-    url(r'^nwiz_session/(?P<step>.+)/$', get_named_session_wizard(), name='nwiz_session'),
+-    url(r'^nwiz_session/$', get_named_session_wizard(), name='nwiz_session_start'),
+-    url(r'^nwiz_cookie/(?P<step>.+)/$', get_named_cookie_wizard(), name='nwiz_cookie'),
+-    url(r'^nwiz_cookie/$', get_named_cookie_wizard(), name='nwiz_cookie_start'),
+-)
+diff --git a/django/contrib/formtools/wizard/tests/sessionstoragetests.py b/django/contrib/formtools/wizard/tests/sessionstoragetests.py
+deleted file mode 100644
+index c643921..0000000
+--- a/django/contrib/formtools/wizard/tests/sessionstoragetests.py
++++ /dev/null
+@@ -1,8 +0,0 @@
+-from django.test import TestCase
+-
+-from django.contrib.formtools.wizard.tests.storagetests import TestStorage
+-from django.contrib.formtools.wizard.storage.session import SessionStorage
+-
+-class TestSessionStorage(TestStorage, TestCase):
+-    def get_storage(self):
+-        return SessionStorage
+diff --git a/django/contrib/formtools/wizard/tests/storagetests.py b/django/contrib/formtools/wizard/tests/storagetests.py
+deleted file mode 100644
+index fec4fae..0000000
+--- a/django/contrib/formtools/wizard/tests/storagetests.py
++++ /dev/null
+@@ -1,76 +0,0 @@
+-from datetime import datetime
+-
+-from django.http import HttpRequest
+-from django.conf import settings
+-from django.utils.importlib import import_module
+-
+-from django.contrib.auth.models import User
+-
+-def get_request():
+-    request = HttpRequest()
+-    engine = import_module(settings.SESSION_ENGINE)
+-    request.session = engine.SessionStore(None)
+-    return request
+-
+-class TestStorage(object):
+-    def setUp(self):
+-        self.testuser, created = User.objects.get_or_create(username='testuser1')
+-
+-    def test_current_step(self):
+-        request = get_request()
+-        storage = self.get_storage()('wizard1', request, None)
+-        my_step = 2
+-
+-        self.assertEqual(storage.current_step, None)
+-
+-        storage.current_step = my_step
+-        self.assertEqual(storage.current_step, my_step)
+-
+-        storage.reset()
+-        self.assertEqual(storage.current_step, None)
+-
+-        storage.current_step = my_step
+-        storage2 = self.get_storage()('wizard2', request, None)
+-        self.assertEqual(storage2.current_step, None)
+-
+-    def test_step_data(self):
+-        request = get_request()
+-        storage = self.get_storage()('wizard1', request, None)
+-        step1 = 'start'
+-        step_data1 = {'field1': 'data1',
+-                      'field2': 'data2',
+-                      'field3': datetime.now(),
+-                      'field4': self.testuser}
+-
+-        self.assertEqual(storage.get_step_data(step1), None)
+-
+-        storage.set_step_data(step1, step_data1)
+-        self.assertEqual(storage.get_step_data(step1), step_data1)
+-
+-        storage.reset()
+-        self.assertEqual(storage.get_step_data(step1), None)
+-
+-        storage.set_step_data(step1, step_data1)
+-        storage2 = self.get_storage()('wizard2', request, None)
+-        self.assertEqual(storage2.get_step_data(step1), None)
+-
+-    def test_extra_context(self):
+-        request = get_request()
+-        storage = self.get_storage()('wizard1', request, None)
+-        extra_context = {'key1': 'data1',
+-                         'key2': 'data2',
+-                         'key3': datetime.now(),
+-                         'key4': self.testuser}
+-
+-        self.assertEqual(storage.extra_data, {})
+-
+-        storage.extra_data = extra_context
+-        self.assertEqual(storage.extra_data, extra_context)
+-
+-        storage.reset()
+-        self.assertEqual(storage.extra_data, {})
+-
+-        storage.extra_data = extra_context
+-        storage2 = self.get_storage()('wizard2', request, None)
+-        self.assertEqual(storage2.extra_data, {})
+-
+diff --git a/django/contrib/formtools/wizard/tests/wizardtests/__init__.py b/django/contrib/formtools/wizard/tests/wizardtests/__init__.py
+deleted file mode 100644
+index 9173cd8..0000000
+--- a/django/contrib/formtools/wizard/tests/wizardtests/__init__.py
++++ /dev/null
+@@ -1 +0,0 @@
+-from django.contrib.formtools.wizard.tests.wizardtests.tests import *
+\ No newline at end of file
+diff --git a/django/contrib/formtools/wizard/tests/wizardtests/forms.py b/django/contrib/formtools/wizard/tests/wizardtests/forms.py
+deleted file mode 100644
+index 726d74a..0000000
+--- a/django/contrib/formtools/wizard/tests/wizardtests/forms.py
++++ /dev/null
+@@ -1,57 +0,0 @@
+-import tempfile
+-
+-from django import forms
+-from django.core.files.storage import FileSystemStorage
+-from django.forms.formsets import formset_factory
+-from django.http import HttpResponse
+-from django.template import Template, Context
+-
+-from django.contrib.auth.models import User
+-
+-from django.contrib.formtools.wizard.views import WizardView
+-
+-temp_storage_location = tempfile.mkdtemp()
+-temp_storage = FileSystemStorage(location=temp_storage_location)
+-
+-class Page1(forms.Form):
+-    name = forms.CharField(max_length=100)
+-    user = forms.ModelChoiceField(queryset=User.objects.all())
+-    thirsty = forms.NullBooleanField()
+-
+-class Page2(forms.Form):
+-    address1 = forms.CharField(max_length=100)
+-    address2 = forms.CharField(max_length=100)
+-    file1 = forms.FileField()
+-
+-class Page3(forms.Form):
+-    random_crap = forms.CharField(max_length=100)
+-
+-Page4 = formset_factory(Page3, extra=2)
+-
+-class ContactWizard(WizardView):
+-    file_storage = temp_storage
+-
+-    def done(self, form_list, **kwargs):
+-        c = Context({
+-            'form_list': [x.cleaned_data for x in form_list],
+-            'all_cleaned_data': self.get_all_cleaned_data()
+-        })
+-
+-        for form in self.form_list.keys():
+-            c[form] = self.get_cleaned_data_for_step(form)
+-
+-        c['this_will_fail'] = self.get_cleaned_data_for_step('this_will_fail')
+-        return HttpResponse(Template('').render(c))
+-
+-    def get_context_data(self, form, **kwargs):
+-        context = super(ContactWizard, self).get_context_data(form, **kwargs)
+-        if self.storage.current_step == 'form2':
+-            context.update({'another_var': True})
+-        return context
+-
+-class SessionContactWizard(ContactWizard):
+-    storage_name = 'django.contrib.formtools.wizard.storage.session.SessionStorage'
+-
+-class CookieContactWizard(ContactWizard):
+-    storage_name = 'django.contrib.formtools.wizard.storage.cookie.CookieStorage'
+-
+diff --git a/django/contrib/formtools/wizard/tests/wizardtests/templates/other_wizard_form.html b/django/contrib/formtools/wizard/tests/wizardtests/templates/other_wizard_form.html
+deleted file mode 100644
+index 45f812c..0000000
+--- a/django/contrib/formtools/wizard/tests/wizardtests/templates/other_wizard_form.html
++++ /dev/null
+@@ -1 +0,0 @@
+-{% extends "formtools/wizard/wizard_form.html" %}
+diff --git a/django/contrib/formtools/wizard/tests/wizardtests/tests.py b/django/contrib/formtools/wizard/tests/wizardtests/tests.py
+deleted file mode 100644
+index 9366a6d..0000000
+--- a/django/contrib/formtools/wizard/tests/wizardtests/tests.py
++++ /dev/null
+@@ -1,283 +0,0 @@
+-from __future__ import with_statement
+-import os
+-
+-from django.test import TestCase
+-from django.conf import settings
+-from django.contrib.auth.models import User
+-
+-from django.contrib.formtools import wizard
+-
+-class WizardTests(object):
+-    urls = 'django.contrib.formtools.wizard.tests.wizardtests.urls'
+-
+-    def setUp(self):
+-        self.testuser, created = User.objects.get_or_create(username='testuser1')
+-        self.wizard_step_data[0]['form1-user'] = self.testuser.pk
+-
+-    def test_initial_call(self):
+-        response = self.client.get(self.wizard_url)
+-        wizard = response.context['wizard']
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(wizard['steps'].current, 'form1')
+-        self.assertEqual(wizard['steps'].step0, 0)
+-        self.assertEqual(wizard['steps'].step1, 1)
+-        self.assertEqual(wizard['steps'].last, 'form4')
+-        self.assertEqual(wizard['steps'].prev, None)
+-        self.assertEqual(wizard['steps'].next, 'form2')
+-        self.assertEqual(wizard['steps'].count, 4)
+-
+-    def test_form_post_error(self):
+-        response = self.client.post(self.wizard_url, self.wizard_step_1_data)
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-        self.assertEqual(response.context['wizard']['form'].errors,
+-                         {'name': [u'This field is required.'],
+-                          'user': [u'This field is required.']})
+-
+-    def test_form_post_success(self):
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        wizard = response.context['wizard']
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(wizard['steps'].current, 'form2')
+-        self.assertEqual(wizard['steps'].step0, 1)
+-        self.assertEqual(wizard['steps'].prev, 'form1')
+-        self.assertEqual(wizard['steps'].next, 'form3')
+-
+-    def test_form_stepback(self):
+-        response = self.client.get(self.wizard_url)
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        response = self.client.post(self.wizard_url, {
+-            'wizard_prev_step': response.context['wizard']['steps'].prev})
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-    def test_template_context(self):
+-        response = self.client.get(self.wizard_url)
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-        self.assertEqual(response.context.get('another_var', None), None)
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-        self.assertEqual(response.context.get('another_var', None), True)
+-
+-    def test_form_finish(self):
+-        response = self.client.get(self.wizard_url)
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        post_data = self.wizard_step_data[1]
+-        post_data['form2-file1'] = open(__file__)
+-        response = self.client.post(self.wizard_url, post_data)
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form4')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
+-        self.assertEqual(response.status_code, 200)
+-
+-        all_data = response.context['form_list']
+-        self.assertEqual(all_data[1]['file1'].read(), open(__file__).read())
+-        del all_data[1]['file1']
+-        self.assertEqual(all_data, [
+-            {'name': u'Pony', 'thirsty': True, 'user': self.testuser},
+-            {'address1': u'123 Main St', 'address2': u'Djangoland'},
+-            {'random_crap': u'blah blah'},
+-            [{'random_crap': u'blah blah'},
+-             {'random_crap': u'blah blah'}]])
+-
+-    def test_cleaned_data(self):
+-        response = self.client.get(self.wizard_url)
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-
+-        post_data = self.wizard_step_data[1]
+-        post_data['form2-file1'] = open(__file__)
+-        response = self.client.post(self.wizard_url, post_data)
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
+-        self.assertEqual(response.status_code, 200)
+-
+-        all_data = response.context['all_cleaned_data']
+-        self.assertEqual(all_data['file1'].read(), open(__file__).read())
+-        del all_data['file1']
+-        self.assertEqual(all_data, {
+-            'name': u'Pony', 'thirsty': True, 'user': self.testuser,
+-            'address1': u'123 Main St', 'address2': u'Djangoland',
+-            'random_crap': u'blah blah', 'formset-form4': [
+-                {'random_crap': u'blah blah'},
+-                {'random_crap': u'blah blah'}]})
+-
+-    def test_manipulated_data(self):
+-        response = self.client.get(self.wizard_url)
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-
+-        post_data = self.wizard_step_data[1]
+-        post_data['form2-file1'] = open(__file__)
+-        response = self.client.post(self.wizard_url, post_data)
+-        self.assertEqual(response.status_code, 200)
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
+-        self.assertEqual(response.status_code, 200)
+-        self.client.cookies.pop('sessionid', None)
+-        self.client.cookies.pop('wizard_cookie_contact_wizard', None)
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-    def test_form_refresh(self):
+-        response = self.client.get(self.wizard_url)
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form1')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        post_data = self.wizard_step_data[1]
+-        post_data['form2-file1'] = open(__file__)
+-        response = self.client.post(self.wizard_url, post_data)
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form3')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[2])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form4')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[0])
+-        self.assertEqual(response.status_code, 200)
+-        self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+-
+-        response = self.client.post(self.wizard_url, self.wizard_step_data[3])
+-        self.assertEqual(response.status_code, 200)
+-
+-
+-class SessionWizardTests(WizardTests, TestCase):
+-    wizard_url = '/wiz_session/'
+-    wizard_step_1_data = {
+-        'session_contact_wizard-current_step': 'form1',
+-    }
+-    wizard_step_data = (
+-        {
+-            'form1-name': 'Pony',
+-            'form1-thirsty': '2',
+-            'session_contact_wizard-current_step': 'form1',
+-        },
+-        {
+-            'form2-address1': '123 Main St',
+-            'form2-address2': 'Djangoland',
+-            'session_contact_wizard-current_step': 'form2',
+-        },
+-        {
+-            'form3-random_crap': 'blah blah',
+-            'session_contact_wizard-current_step': 'form3',
+-        },
+-        {
+-            'form4-INITIAL_FORMS': '0',
+-            'form4-TOTAL_FORMS': '2',
+-            'form4-MAX_NUM_FORMS': '0',
+-            'form4-0-random_crap': 'blah blah',
+-            'form4-1-random_crap': 'blah blah',
+-            'session_contact_wizard-current_step': 'form4',
+-        }
+-    )
+-
+-class CookieWizardTests(WizardTests, TestCase):
+-    wizard_url = '/wiz_cookie/'
+-    wizard_step_1_data = {
+-        'cookie_contact_wizard-current_step': 'form1',
+-    }
+-    wizard_step_data = (
+-        {
+-            'form1-name': 'Pony',
+-            'form1-thirsty': '2',
+-            'cookie_contact_wizard-current_step': 'form1',
+-        },
+-        {
+-            'form2-address1': '123 Main St',
+-            'form2-address2': 'Djangoland',
+-            'cookie_contact_wizard-current_step': 'form2',
+-        },
+-        {
+-            'form3-random_crap': 'blah blah',
+-            'cookie_contact_wizard-current_step': 'form3',
+-        },
+-        {
+-            'form4-INITIAL_FORMS': '0',
+-            'form4-TOTAL_FORMS': '2',
+-            'form4-MAX_NUM_FORMS': '0',
+-            'form4-0-random_crap': 'blah blah',
+-            'form4-1-random_crap': 'blah blah',
+-            'cookie_contact_wizard-current_step': 'form4',
+-        }
+-    )
+-
+-class WizardTestKwargs(TestCase):
+-    wizard_url = '/wiz_other_template/'
+-    wizard_step_1_data = {
+-        'cookie_contact_wizard-current_step': 'form1',
+-    }
+-    wizard_step_data = (
+-        {
+-            'form1-name': 'Pony',
+-            'form1-thirsty': '2',
+-            'cookie_contact_wizard-current_step': 'form1',
+-        },
+-        {
+-            'form2-address1': '123 Main St',
+-            'form2-address2': 'Djangoland',
+-            'cookie_contact_wizard-current_step': 'form2',
+-        },
+-        {
+-            'form3-random_crap': 'blah blah',
+-            'cookie_contact_wizard-current_step': 'form3',
+-        },
+-        {
+-            'form4-INITIAL_FORMS': '0',
+-            'form4-TOTAL_FORMS': '2',
+-            'form4-MAX_NUM_FORMS': '0',
+-            'form4-0-random_crap': 'blah blah',
+-            'form4-1-random_crap': 'blah blah',
+-            'cookie_contact_wizard-current_step': 'form4',
+-        }
+-    )
+-    urls = 'django.contrib.formtools.wizard.tests.wizardtests.urls'
+-
+-    def setUp(self):
+-        self.testuser, created = User.objects.get_or_create(username='testuser1')
+-        self.wizard_step_data[0]['form1-user'] = self.testuser.pk
+-
+-    def test_template(self):
+-        templates = os.path.join(os.path.dirname(__file__), 'templates')
+-        with self.settings(
+-                TEMPLATE_DIRS=list(settings.TEMPLATE_DIRS) + [templates]):
+-            response = self.client.get(self.wizard_url)
+-            self.assertTemplateUsed(response, 'other_wizard_form.html')
+diff --git a/django/contrib/formtools/wizard/tests/wizardtests/urls.py b/django/contrib/formtools/wizard/tests/wizardtests/urls.py
+deleted file mode 100644
+index 7b5e84e..0000000
+--- a/django/contrib/formtools/wizard/tests/wizardtests/urls.py
++++ /dev/null
+@@ -1,22 +0,0 @@
+-from django.conf.urls.defaults import *
+-from django.contrib.formtools.wizard.tests.wizardtests.forms import (
+-    SessionContactWizard, CookieContactWizard, Page1, Page2, Page3, Page4)
+-
+-urlpatterns = patterns('',
+-    url(r'^wiz_session/$', SessionContactWizard.as_view(
+-        [('form1', Page1),
+-         ('form2', Page2),
+-         ('form3', Page3),
+-         ('form4', Page4)])),
+-    url(r'^wiz_cookie/$', CookieContactWizard.as_view(
+-        [('form1', Page1),
+-         ('form2', Page2),
+-         ('form3', Page3),
+-         ('form4', Page4)])),
+-     url(r'^wiz_other_template/$', CookieContactWizard.as_view(
+-         [('form1', Page1),
+-          ('form2', Page2),
+-          ('form3', Page3),
+-          ('form4', Page4)],
+-          template_name='other_wizard_form.html')),
+-)
+diff --git a/docs/ref/contrib/formtools/form-wizard.txt b/docs/ref/contrib/formtools/form-wizard.txt
+index 036c42c..2645c28 100644
+--- a/docs/ref/contrib/formtools/form-wizard.txt
++++ b/docs/ref/contrib/formtools/form-wizard.txt
+@@ -51,7 +51,7 @@ you just have to do these things:
+        generic template to handle every one of the forms, or you can define a
+        specific template for each form.
+ 
+-    4. Add ``django.contrib.formtools.wizard`` to your
++    4. Add ``django.contrib.formtools`` to your
+        :setting:`INSTALLED_APPS` list in your settings file.
+ 
+     5. Point your URLconf at your :class:`WizardView` :meth:`~WizardView.as_view` method.
+diff --git a/docs/ref/contrib/index.txt b/docs/ref/contrib/index.txt
+index f62c8fc..3721646 100644
+--- a/docs/ref/contrib/index.txt
++++ b/docs/ref/contrib/index.txt
+@@ -102,7 +102,7 @@ An abstraction of the following workflow:
+ See the :doc:`form preview documentation </ref/contrib/formtools/form-preview>`.
+ 
+ django.contrib.formtools.wizard
+---------------------------------
++-------------------------------
+ 
+ Splits forms across multiple Web pages.
+ 
+diff --git a/tests/runtests.py b/tests/runtests.py
+index 6d4f282..ba66d2a 100755
+--- a/tests/runtests.py
++++ b/tests/runtests.py
+@@ -35,7 +35,6 @@ ALWAYS_INSTALLED_APPS = [
+     'django.contrib.admindocs',
+     'django.contrib.staticfiles',
+     'django.contrib.humanize',
+-    'django.contrib.formtools.wizard',
+     'regressiontests.staticfiles_tests',
+     'regressiontests.staticfiles_tests.apps.test',
+     'regressiontests.staticfiles_tests.apps.no_label',
+

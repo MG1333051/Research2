@@ -1,0 +1,2861 @@
+commit e74e207cce54802f897adcb42149440ee154821e
+Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+Date:   Sun Feb 10 16:15:49 2013 +0100
+
+    Fixed #17260 -- Added time zone aware aggregation and lookups.
+    
+    Thanks Carl Meyer for the review.
+    
+    Squashed commit of the following:
+    
+    commit 4f290bdb60b7d8534abf4ca901bd0844612dcbda
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Wed Feb 13 21:21:30 2013 +0100
+    
+        Used '0:00' instead of 'UTC' which doesn't always exist in Oracle.
+    
+        Thanks Ian Kelly for the suggestion.
+    
+    commit 01b6366f3ce67d57a58ca8f25e5be77911748638
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Wed Feb 13 13:38:43 2013 +0100
+    
+        Made tzname a parameter of datetime_extract/trunc_sql.
+    
+        This is required to work around a bug in Oracle.
+    
+    commit 924a144ef8a80ba4daeeafbe9efaa826566e9d02
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Wed Feb 13 14:47:44 2013 +0100
+    
+        Added support for parameters in SELECT clauses.
+    
+    commit b4351d2890cd1090d3ff2d203fe148937324c935
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Mon Feb 11 22:30:22 2013 +0100
+    
+        Documented backwards incompatibilities in the two previous commits.
+    
+    commit 91ef84713c81bd455f559dacf790e586d08cacb9
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Mon Feb 11 09:42:31 2013 +0100
+    
+        Used QuerySet.datetimes for the admin's date_hierarchy.
+    
+    commit 0d0de288a5210fa106cd4350961eb2006535cc5c
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Mon Feb 11 09:29:38 2013 +0100
+    
+        Used QuerySet.datetimes in date-based generic views.
+    
+    commit 9c0859ff7c0b00734afe7fc15609d43d83215072
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 21:43:25 2013 +0100
+    
+        Implemented QuerySet.datetimes on Oracle.
+    
+    commit 68ab511a4ffbd2b811bf5da174d47e4dd90f28fc
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 21:43:14 2013 +0100
+    
+        Implemented QuerySet.datetimes on MySQL.
+    
+    commit 22d52681d347a8cdf568dc31ed032cbc61d049ef
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 21:42:29 2013 +0100
+    
+        Implemented QuerySet.datetimes on SQLite.
+    
+    commit f6800fd04c93722b45f9236976389e0b2fe436f5
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 21:43:03 2013 +0100
+    
+        Implemented QuerySet.datetimes on PostgreSQL.
+    
+    commit 0c829c23f4cf4d6804cadcc93032dd4c26b8c65e
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 21:41:08 2013 +0100
+    
+        Added datetime-handling infrastructure in the ORM layers.
+    
+    commit 104d82a7778cf3f0f5d03dfa53709c26df45daad
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Mon Feb 11 10:05:55 2013 +0100
+    
+        Updated null_queries tests to avoid clashing with the __second lookup.
+    
+    commit c01bbb32358201b3ac8cb4291ef87b7612a2b8e6
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 23:07:41 2013 +0100
+    
+        Updated tests of .dates().
+    
+        Replaced .dates() by .datetimes() for DateTimeFields.
+        Replaced dates with datetimes in the expected output for DateFields.
+    
+    commit 50fb7a52462fecf0127b38e7f3df322aeb287c43
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 21:40:09 2013 +0100
+    
+        Updated and added tests for QuerySet.datetimes.
+    
+    commit a8451a5004c437190e264667b1e6fb8acc3c1eeb
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 22:34:46 2013 +0100
+    
+        Documented the new time lookups and updated the date lookups.
+    
+    commit 29413eab2bd1d5e004598900c0dadc0521bbf4d3
+    Author: Aymeric Augustin <aymeric.augustin@m4x.org>
+    Date:   Sun Feb 10 16:15:49 2013 +0100
+    
+        Documented QuerySet.datetimes and updated QuerySet.dates.
+
+diff --git a/django/contrib/admin/templatetags/admin_list.py b/django/contrib/admin/templatetags/admin_list.py
+index ce435de..c5bcad3 100644
+--- a/django/contrib/admin/templatetags/admin_list.py
++++ b/django/contrib/admin/templatetags/admin_list.py
+@@ -292,6 +292,8 @@ def date_hierarchy(cl):
+     """
+     if cl.date_hierarchy:
+         field_name = cl.date_hierarchy
++        field = cl.opts.get_field_by_name(field_name)[0]
++        dates_or_datetimes = 'datetimes' if isinstance(field, models.DateTimeField) else 'dates'        ######################isinstance
+         year_field = '%s__year' % field_name
+         month_field = '%s__month' % field_name
+         day_field = '%s__day' % field_name
+@@ -323,7 +325,8 @@ def date_hierarchy(cl):
+                 'choices': [{'title': capfirst(formats.date_format(day, 'MONTH_DAY_FORMAT'))}]
+             }
+         elif year_lookup and month_lookup:
+-            days = cl.query_set.filter(**{year_field: year_lookup, month_field: month_lookup}).dates(field_name, 'day')
++            days = cl.query_set.filter(**{year_field: year_lookup, month_field: month_lookup})
++            days = getattr(days, dates_or_datetimes)(field_name, 'day')           ######################getattr
+             return {
+                 'show': True,
+                 'back': {
+@@ -336,11 +339,12 @@ def date_hierarchy(cl):
+                 } for day in days]
+             }
+         elif year_lookup:
+-            months = cl.query_set.filter(**{year_field: year_lookup}).dates(field_name, 'month')
++            months = cl.query_set.filter(**{year_field: year_lookup})
++            months = getattr(months, dates_or_datetimes)(field_name, 'month')                 ######################getattr
+             return {
+-                'show' : True,
++                'show': True,
+                 'back': {
+-                    'link' : link({}),
++                    'link': link({}),
+                     'title': _('All dates')
+                 },
+                 'choices': [{
+@@ -349,7 +353,7 @@ def date_hierarchy(cl):
+                 } for month in months]
+             }
+         else:
+-            years = cl.query_set.dates(field_name, 'year')
++            years = getattr(cl.query_set, dates_or_datetimes)(field_name, 'year')               ######################getattr
+             return {
+                 'show': True,
+                 'choices': [{
+diff --git a/django/contrib/gis/db/backends/mysql/compiler.py b/django/contrib/gis/db/backends/mysql/compiler.py
+index 7079db9..f4654ef 100644
+--- a/django/contrib/gis/db/backends/mysql/compiler.py
++++ b/django/contrib/gis/db/backends/mysql/compiler.py
+@@ -30,3 +30,6 @@ class SQLAggregateCompiler(compiler.SQLAggregateCompiler, GeoSQLCompiler):
+ 
+ class SQLDateCompiler(compiler.SQLDateCompiler, GeoSQLCompiler):
+     pass
++
++class SQLDateTimeCompiler(compiler.SQLDateTimeCompiler, GeoSQLCompiler):
++    pass
+diff --git a/django/contrib/gis/db/backends/mysql/operations.py b/django/contrib/gis/db/backends/mysql/operations.py
+index fa20ca0..14402ec 100644
+--- a/django/contrib/gis/db/backends/mysql/operations.py
++++ b/django/contrib/gis/db/backends/mysql/operations.py
+@@ -56,12 +56,13 @@ class MySQLOperations(DatabaseOperations, BaseSpatialOperations):
+ 
+         lookup_info = self.geometry_functions.get(lookup_type, False)
+         if lookup_info:
+-            return "%s(%s, %s)" % (lookup_info, geo_col,
+-                                   self.get_geom_placeholder(value, field.srid))
++            sql = "%s(%s, %s)" % (lookup_info, geo_col,
++                                  self.get_geom_placeholder(value, field.srid))
++            return sql, []
+ 
+         # TODO: Is this really necessary? MySQL can't handle NULL geometries
+         #  in its spatial indexes anyways.
+         if lookup_type == 'isnull':
+-            return "%s IS %sNULL" % (geo_col, (not value and 'NOT ' or ''))
++            return "%s IS %sNULL" % (geo_col, ('' if value else 'NOT ')), []
+ 
+         raise TypeError("Got invalid lookup_type: %s" % repr(lookup_type))
+diff --git a/django/contrib/gis/db/backends/oracle/compiler.py b/django/contrib/gis/db/backends/oracle/compiler.py
+index 98da016..d00af7f 100644
+--- a/django/contrib/gis/db/backends/oracle/compiler.py
++++ b/django/contrib/gis/db/backends/oracle/compiler.py
+@@ -20,3 +20,6 @@ class SQLAggregateCompiler(compiler.SQLAggregateCompiler, GeoSQLCompiler):
+ 
+ class SQLDateCompiler(compiler.SQLDateCompiler, GeoSQLCompiler):
+     pass
++
++class SQLDateTimeCompiler(compiler.SQLDateTimeCompiler, GeoSQLCompiler):
++    pass
+diff --git a/django/contrib/gis/db/backends/oracle/operations.py b/django/contrib/gis/db/backends/oracle/operations.py
+index 4e42b4c..18697ac 100644
+--- a/django/contrib/gis/db/backends/oracle/operations.py
++++ b/django/contrib/gis/db/backends/oracle/operations.py
+@@ -262,7 +262,7 @@ class OracleOperations(DatabaseOperations, BaseSpatialOperations):
+                 return lookup_info.as_sql(geo_col, self.get_geom_placeholder(field, value))
+         elif lookup_type == 'isnull':
+             # Handling 'isnull' lookup type
+-            return "%s IS %sNULL" % (geo_col, (not value and 'NOT ' or ''))
++            return "%s IS %sNULL" % (geo_col, ('' if value else 'NOT ')), []
+ 
+         raise TypeError("Got invalid lookup_type: %s" % repr(lookup_type))
+ 
+@@ -288,7 +288,7 @@ class OracleOperations(DatabaseOperations, BaseSpatialOperations):
+     def spatial_ref_sys(self):
+         from django.contrib.gis.db.backends.oracle.models import SpatialRefSys
+         return SpatialRefSys
+-    
++
+     def modify_insert_params(self, placeholders, params):
+         """Drop out insert parameters for NULL placeholder. Needed for Oracle Spatial
+         backend due to #10888
+diff --git a/django/contrib/gis/db/backends/postgis/operations.py b/django/contrib/gis/db/backends/postgis/operations.py
+index aa23b97..fe90343 100644
+--- a/django/contrib/gis/db/backends/postgis/operations.py
++++ b/django/contrib/gis/db/backends/postgis/operations.py
+@@ -560,7 +560,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
+ 
+         elif lookup_type == 'isnull':
+             # Handling 'isnull' lookup type
+-            return "%s IS %sNULL" % (geo_col, (not value and 'NOT ' or ''))
++            return "%s IS %sNULL" % (geo_col, ('' if value else 'NOT ')), []
+ 
+         raise TypeError("Got invalid lookup_type: %s" % repr(lookup_type))
+ 
+diff --git a/django/contrib/gis/db/backends/spatialite/operations.py b/django/contrib/gis/db/backends/spatialite/operations.py
+index 773ac0b..d2d75c1 100644
+--- a/django/contrib/gis/db/backends/spatialite/operations.py
++++ b/django/contrib/gis/db/backends/spatialite/operations.py
+@@ -358,7 +358,7 @@ class SpatiaLiteOperations(DatabaseOperations, BaseSpatialOperations):
+             return op.as_sql(geo_col, self.get_geom_placeholder(field, geom))
+         elif lookup_type == 'isnull':
+             # Handling 'isnull' lookup type
+-            return "%s IS %sNULL" % (geo_col, (not value and 'NOT ' or ''))
++            return "%s IS %sNULL" % (geo_col, ('' if value else 'NOT ')), []
+ 
+         raise TypeError("Got invalid lookup_type: %s" % repr(lookup_type))
+ 
+diff --git a/django/contrib/gis/db/backends/util.py b/django/contrib/gis/db/backends/util.py
+index 2fc9123..2612810 100644
+--- a/django/contrib/gis/db/backends/util.py
++++ b/django/contrib/gis/db/backends/util.py
+@@ -16,7 +16,7 @@ class SpatialOperation(object):
+         self.extra = kwargs
+ 
+     def as_sql(self, geo_col, geometry='%s'):
+-        return self.sql_template % self.params(geo_col, geometry)
++        return self.sql_template % self.params(geo_col, geometry), []
+ 
+     def params(self, geo_col, geometry):
+         params = {'function' : self.function,
+diff --git a/django/contrib/gis/db/models/sql/aggregates.py b/django/contrib/gis/db/models/sql/aggregates.py
+index 9fcbb51..ae848c0 100644
+--- a/django/contrib/gis/db/models/sql/aggregates.py
++++ b/django/contrib/gis/db/models/sql/aggregates.py
+@@ -22,13 +22,15 @@ class GeoAggregate(Aggregate):
+             raise ValueError('Geospatial aggregates only allowed on geometry fields.')
+ 
+     def as_sql(self, qn, connection):
+-        "Return the aggregate, rendered as SQL."
++        "Return the aggregate, rendered as SQL with parameters."
+ 
+         if connection.ops.oracle:
+             self.extra['tolerance'] = self.tolerance
+ 
++        params = []
++
+         if hasattr(self.col, 'as_sql'):
+-            field_name = self.col.as_sql(qn, connection)
++            field_name, params = self.col.as_sql(qn, connection)
+         elif isinstance(self.col, (list, tuple)):
+             field_name = '.'.join([qn(c) for c in self.col])
+         else:
+@@ -36,13 +38,13 @@ class GeoAggregate(Aggregate):
+ 
+         sql_template, sql_function = connection.ops.spatial_aggregate_sql(self)
+ 
+-        params = {
++        substitutions = {
+             'function': sql_function,
+             'field': field_name
+         }
+-        params.update(self.extra)
++        substitutions.update(self.extra)
+ 
+-        return sql_template % params
++        return sql_template % substitutions, params
+ 
+ class Collect(GeoAggregate):
+     pass
+diff --git a/django/contrib/gis/db/models/sql/compiler.py b/django/contrib/gis/db/models/sql/compiler.py
+index fc53d08..b488f59 100644
+--- a/django/contrib/gis/db/models/sql/compiler.py
++++ b/django/contrib/gis/db/models/sql/compiler.py
+@@ -1,14 +1,16 @@
++import datetime
+ try:
+     from itertools import zip_longest
+ except ImportError:
+     from itertools import izip_longest as zip_longest
+ 
+-from django.utils.six.moves import zip
+-
+-from django.db.backends.util import truncate_name, typecast_timestamp
++from django.conf import settings
++from django.db.backends.util import truncate_name, typecast_date, typecast_timestamp
+ from django.db.models.sql import compiler
+ from django.db.models.sql.constants import MULTI
+ from django.utils import six
++from django.utils.six.moves import zip
++from django.utils import timezone
+ 
+ SQLCompiler = compiler.SQLCompiler
+ 
+@@ -31,6 +33,7 @@ class GeoSQLCompiler(compiler.SQLCompiler):
+         qn2 = self.connection.ops.quote_name
+         result = ['(%s) AS %s' % (self.get_extra_select_format(alias) % col[0], qn2(alias))
+                   for alias, col in six.iteritems(self.query.extra_select)]
++        params = []
+         aliases = set(self.query.extra_select.keys())
+         if with_aliases:
+             col_aliases = aliases.copy()
+@@ -61,7 +64,9 @@ class GeoSQLCompiler(compiler.SQLCompiler):
+                         aliases.add(r)
+                         col_aliases.add(col[1])
+                 else:
+-                    result.append(col.as_sql(qn, self.connection))
++                    col_sql, col_params = col.as_sql(qn, self.connection)
++                    result.append(col_sql)
++                    params.extend(col_params)
+ 
+                     if hasattr(col, 'alias'):
+                         aliases.add(col.alias)
+@@ -74,15 +79,13 @@ class GeoSQLCompiler(compiler.SQLCompiler):
+             aliases.update(new_aliases)
+ 
+         max_name_length = self.connection.ops.max_name_length()
+-        result.extend([
+-                '%s%s' % (
+-                    self.get_extra_select_format(alias) % aggregate.as_sql(qn, self.connection),
+-                    alias is not None
+-                        and ' AS %s' % qn(truncate_name(alias, max_name_length))
+-                        or ''
+-                    )
+-                for alias, aggregate in self.query.aggregate_select.items()
+-        ])
++        for alias, aggregate in self.query.aggregate_select.items():
++            agg_sql, agg_params = aggregate.as_sql(qn, self.connection)
++            if alias is None:
++                result.append(agg_sql)
++            else:
++                result.append('%s AS %s' % (agg_sql, qn(truncate_name(alias, max_name_length))))
++            params.extend(agg_params)
+ 
+         # This loop customized for GeoQuery.
+         for (table, col), field in self.query.related_select_cols:
+@@ -98,7 +101,7 @@ class GeoSQLCompiler(compiler.SQLCompiler):
+                 col_aliases.add(col)
+ 
+         self._select_aliases = aliases
+-        return result
++        return result, params
+ 
+     def get_default_columns(self, with_aliases=False, col_aliases=None,
+             start_alias=None, opts=None, as_pairs=False, from_parent=None):
+@@ -280,5 +283,35 @@ class SQLDateCompiler(compiler.SQLDateCompiler, GeoSQLCompiler):
+                 if self.connection.ops.oracle:
+                     date = self.resolve_columns(row, fields)[offset]
+                 elif needs_string_cast:
+-                    date = typecast_timestamp(str(date))
++                    date = typecast_date(str(date))
++                if isinstance(date, datetime.datetime):    ######################getattr
++                    date = date.date()
+                 yield date
++
++class SQLDateTimeCompiler(compiler.SQLDateTimeCompiler, GeoSQLCompiler):
++    """
++    This is overridden for GeoDjango to properly cast date columns, since
++    `GeoQuery.resolve_columns` is used for spatial values.
++    See #14648, #16757.
++    """
++    def results_iter(self):
++        if self.connection.ops.oracle:
++            from django.db.models.fields import DateTimeField
++            fields = [DateTimeField()]
++        else:
++            needs_string_cast = self.connection.features.needs_datetime_string_cast
++
++        offset = len(self.query.extra_select)
++        for rows in self.execute_sql(MULTI):
++            for row in rows:
++                datetime = row[offset]
++                if self.connection.ops.oracle:
++                    datetime = self.resolve_columns(row, fields)[offset]
++                elif needs_string_cast:
++                    datetime = typecast_timestamp(str(datetime))
++                # Datetimes are artifically returned in UTC on databases that
++                # don't support time zone. Restore the zone used in the query.
++                if settings.USE_TZ:
++                    datetime = datetime.replace(tzinfo=None)
++                    datetime = timezone.make_aware(datetime, self.query.tzinfo)
++                yield datetime
+diff --git a/django/contrib/gis/db/models/sql/where.py b/django/contrib/gis/db/models/sql/where.py
+index ec078ae..6ef34db 100644
+--- a/django/contrib/gis/db/models/sql/where.py
++++ b/django/contrib/gis/db/models/sql/where.py
+@@ -44,8 +44,9 @@ class GeoWhereNode(WhereNode):
+         lvalue, lookup_type, value_annot, params_or_value = child
+         if isinstance(lvalue, GeoConstraint):
+             data, params = lvalue.process(lookup_type, params_or_value, connection)
+-            spatial_sql = connection.ops.spatial_lookup_sql(data, lookup_type, params_or_value, lvalue.field, qn)
+-            return spatial_sql, params
++            spatial_sql, spatial_params = connection.ops.spatial_lookup_sql(
++                    data, lookup_type, params_or_value, lvalue.field, qn)
++            return spatial_sql, spatial_params + params
+         else:
+             return super(GeoWhereNode, self).make_atom(child, qn, connection)
+ 
+diff --git a/django/contrib/gis/tests/geoapp/test_regress.py b/django/contrib/gis/tests/geoapp/test_regress.py
+index 15e8555..a27b2d4 100644
+--- a/django/contrib/gis/tests/geoapp/test_regress.py
++++ b/django/contrib/gis/tests/geoapp/test_regress.py
+@@ -49,7 +49,7 @@ class GeoRegressionTests(TestCase):
+         founded = datetime(1857, 5, 23)
+         mansfield = PennsylvaniaCity.objects.create(name='Mansfield', county='Tioga', point='POINT(-77.071445 41.823881)',
+                                                     founded=founded)
+-        self.assertEqual(founded, PennsylvaniaCity.objects.dates('founded', 'day')[0])
++        self.assertEqual(founded, PennsylvaniaCity.objects.datetimes('founded', 'day')[0])
+         self.assertEqual(founded, PennsylvaniaCity.objects.aggregate(Min('founded'))['founded__min'])
+ 
+     def test_empty_count(self):
+diff --git a/django/db/backends/__init__.py b/django/db/backends/__init__.py
+index bbb5a5b..03b62f6 100644
+--- a/django/db/backends/__init__.py
++++ b/django/db/backends/__init__.py
+@@ -1,3 +1,5 @@
++import datetime
++
+ from django.db.utils import DatabaseError
+ 
+ try:
+@@ -14,7 +16,7 @@ from django.db.transaction import TransactionManagementError
+ from django.utils.functional import cached_property
+ from django.utils.importlib import import_module
+ from django.utils import six
+-from django.utils.timezone import is_aware
++from django.utils import timezone
+ 
+ 
+ class BaseDatabaseWrapper(object):
+@@ -397,6 +399,9 @@ class BaseDatabaseFeatures(object):
+     # Can datetimes with timezones be used?
+     supports_timezones = True
+ 
++    # Does the database have a copy of the zoneinfo database?
++    has_zoneinfo_database = True
++
+     # When performing a GROUP BY, is an ORDER BY NULL required
+     # to remove any ordering?
+     requires_explicit_null_ordering_when_grouping = False
+@@ -523,7 +528,7 @@ class BaseDatabaseOperations(object):
+     def date_trunc_sql(self, lookup_type, field_name):
+         """
+         Given a lookup_type of 'year', 'month' or 'day', returns the SQL that
+-        truncates the given date field field_name to a DATE object with only
++        truncates the given date field field_name to a date object with only
+         the given specificity.
+         """
+         raise NotImplementedError()
+@@ -537,6 +542,23 @@ class BaseDatabaseOperations(object):
+         """
+         return "%s"
+ 
++    def datetime_extract_sql(self, lookup_type, field_name, tzname):
++        """
++        Given a lookup_type of 'year', 'month', 'day', 'hour', 'minute' or
++        'second', returns the SQL that extracts a value from the given
++        datetime field field_name, and a tuple of parameters.
++        """
++        raise NotImplementedError()
++
++    def datetime_trunc_sql(self, lookup_type, field_name, tzname):
++        """
++        Given a lookup_type of 'year', 'month', 'day', 'hour', 'minute' or
++        'second', returns the SQL that truncates the given datetime field
++        field_name to a datetime object with only the given specificity, and
++        a tuple of parameters.
++        """
++        raise NotImplementedError()
++
+     def deferrable_sql(self):
+         """
+         Returns the SQL necessary to make a constraint "initially deferred"
+@@ -853,7 +875,7 @@ class BaseDatabaseOperations(object):
+         """
+         if value is None:
+             return None
+-        if is_aware(value):
++        if timezone.is_aware(value):
+             raise ValueError("Django does not support timezone-aware times.")
+         return six.text_type(value)
+ 
+@@ -866,29 +888,33 @@ class BaseDatabaseOperations(object):
+             return None
+         return util.format_number(value, max_digits, decimal_places)
+ 
+-    def year_lookup_bounds(self, value):
++    def year_lookup_bounds_for_date_field(self, value):
+         """
+         Returns a two-elements list with the lower and upper bound to be used
+-        with a BETWEEN operator to query a field value using a year lookup
++        with a BETWEEN operator to query a DateField value using a year
++        lookup.
+ 
+         `value` is an int, containing the looked-up year.
+         """
+-        first = '%s-01-01 00:00:00'
+-        second = '%s-12-31 23:59:59.999999'
+-        return [first % value, second % value]
++        first = datetime.date(value, 1, 1)
++        second = datetime.date(value, 12, 31)
++        return [first, second]
+ 
+-    def year_lookup_bounds_for_date_field(self, value):
++    def year_lookup_bounds_for_datetime_field(self, value):
+         """
+         Returns a two-elements list with the lower and upper bound to be used
+-        with a BETWEEN operator to query a DateField value using a year lookup
++        with a BETWEEN operator to query a DateTimeField value using a year
++        lookup.
+ 
+         `value` is an int, containing the looked-up year.
+-
+-        By default, it just calls `self.year_lookup_bounds`. Some backends need
+-        this hook because on their DB date fields can't be compared to values
+-        which include a time part.
+         """
+-        return self.year_lookup_bounds(value)
++        first = datetime.datetime(value, 1, 1)
++        second = datetime.datetime(value, 12, 31, 23, 59, 59, 999999)
++        if settings.USE_TZ:
++            tz = timezone.get_current_timezone()
++            first = timezone.make_aware(first, tz)
++            second = timezone.make_aware(second, tz)
++        return [first, second]
+ 
+     def convert_values(self, value, field):
+         """
+diff --git a/django/db/backends/mysql/base.py b/django/db/backends/mysql/base.py
+index f24df93..9de2a4d 100644
+--- a/django/db/backends/mysql/base.py
++++ b/django/db/backends/mysql/base.py
+@@ -30,6 +30,7 @@ if (version < (1, 2, 1) or (version[:3] == (1, 2, 1) and
+ from MySQLdb.converters import conversions, Thing2Literal
+ from MySQLdb.constants import FIELD_TYPE, CLIENT
+ 
++from django.conf import settings
+ from django.db import utils
+ from django.db.backends import *
+ from django.db.backends.signals import connection_created
+@@ -193,6 +194,12 @@ class DatabaseFeatures(BaseDatabaseFeatures):
+         "Confirm support for introspected foreign keys"
+         return self._mysql_storage_engine != 'MyISAM'
+ 
++    @cached_property
++    def has_zoneinfo_database(self):
++        cursor = self.connection.cursor()
++        cursor.execute("SELECT 1 FROM mysql.time_zone LIMIT 1")
++        return cursor.fetchone() is not None
++
+ class DatabaseOperations(BaseDatabaseOperations):
+     compiler_module = "django.db.backends.mysql.compiler"
+ 
+@@ -218,6 +225,39 @@ class DatabaseOperations(BaseDatabaseOperations):
+             sql = "CAST(DATE_FORMAT(%s, '%s') AS DATETIME)" % (field_name, format_str)
+         return sql
+ 
++    def datetime_extract_sql(self, lookup_type, field_name, tzname):
++        if settings.USE_TZ:
++            field_name = "CONVERT_TZ(%s, 'UTC', %%s)" % field_name
++            params = [tzname]
++        else:
++            params = []
++        # http://dev.mysql.com/doc/mysql/en/date-and-time-functions.html
++        if lookup_type == 'week_day':
++            # DAYOFWEEK() returns an integer, 1-7, Sunday=1.
++            # Note: WEEKDAY() returns 0-6, Monday=0.
++            sql = "DAYOFWEEK(%s)" % field_name
++        else:
++            sql = "EXTRACT(%s FROM %s)" % (lookup_type.upper(), field_name)
++        return sql, params
++
++    def datetime_trunc_sql(self, lookup_type, field_name, tzname):
++        if settings.USE_TZ:
++            field_name = "CONVERT_TZ(%s, 'UTC', %%s)" % field_name
++            params = [tzname]
++        else:
++            params = []
++        fields = ['year', 'month', 'day', 'hour', 'minute', 'second']
++        format = ('%%Y-', '%%m', '-%%d', ' %%H:', '%%i', ':%%s') # Use double percents to escape.
++        format_def = ('0000-', '01', '-01', ' 00:', '00', ':00')
++        try:
++            i = fields.index(lookup_type) + 1
++        except ValueError:
++            sql = field_name
++        else:
++            format_str = ''.join([f for f in format[:i]] + [f for f in format_def[i:]])
++            sql = "CAST(DATE_FORMAT(%s, '%s') AS DATETIME)" % (field_name, format_str)
++        return sql, params
++
+     def date_interval_sql(self, sql, connector, timedelta):
+         return "(%s %s INTERVAL '%d 0:0:%d:%d' DAY_MICROSECOND)" % (sql, connector,
+                 timedelta.days, timedelta.seconds, timedelta.microseconds)
+@@ -314,11 +354,10 @@ class DatabaseOperations(BaseDatabaseOperations):
+         # MySQL doesn't support microseconds
+         return six.text_type(value.replace(microsecond=0))
+ 
+-    def year_lookup_bounds(self, value):
++    def year_lookup_bounds_for_datetime_field(self, value):
+         # Again, no microseconds
+-        first = '%s-01-01 00:00:00'
+-        second = '%s-12-31 23:59:59.99'
+-        return [first % value, second % value]
++        first, second = super(DatabaseOperations, self).year_lookup_bounds_for_datetime_field(value)
++        return [first.replace(microsecond=0), second.replace(microsecond=0)]
+ 
+     def max_name_length(self):
+         return 64
+diff --git a/django/db/backends/mysql/compiler.py b/django/db/backends/mysql/compiler.py
+index d8e9b3a..f4c5563 100644
+--- a/django/db/backends/mysql/compiler.py
++++ b/django/db/backends/mysql/compiler.py
+@@ -31,3 +31,6 @@ class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
+ 
+ class SQLDateCompiler(compiler.SQLDateCompiler, SQLCompiler):
+     pass
++
++class SQLDateTimeCompiler(compiler.SQLDateTimeCompiler, SQLCompiler):
++    pass
+diff --git a/django/db/backends/oracle/base.py b/django/db/backends/oracle/base.py
+index e72a064..7bcfb46 100644
+--- a/django/db/backends/oracle/base.py
++++ b/django/db/backends/oracle/base.py
+@@ -7,6 +7,7 @@ from __future__ import unicode_literals
+ 
+ import datetime
+ import decimal
++import re
+ import sys
+ import warnings
+ 
+@@ -128,12 +129,12 @@ WHEN (new.%(col_name)s IS NULL)
+         """
+ 
+     def date_extract_sql(self, lookup_type, field_name):
+-        # http://download-east.oracle.com/docs/cd/B10501_01/server.920/a96540/functions42a.htm#1017163
+         if lookup_type == 'week_day':
+             # TO_CHAR(field, 'D') returns an integer from 1-7, where 1=Sunday.
+             return "TO_CHAR(%s, 'D')" % field_name
+         else:
+-            return "EXTRACT(%s FROM %s)" % (lookup_type, field_name)
++            # http://docs.oracle.com/cd/B19306_01/server.102/b14200/functions050.htm
++            return "EXTRACT(%s FROM %s)" % (lookup_type.upper(), field_name)
+ 
+     def date_interval_sql(self, sql, connector, timedelta):
+         """
+@@ -150,13 +151,58 @@ WHEN (new.%(col_name)s IS NULL)
+                 timedelta.microseconds, day_precision)
+ 
+     def date_trunc_sql(self, lookup_type, field_name):
+-        # Oracle uses TRUNC() for both dates and numbers.
+-        # http://download-east.oracle.com/docs/cd/B10501_01/server.920/a96540/functions155a.htm#SQLRF06151
+-        if lookup_type == 'day':
+-            sql = 'TRUNC(%s)' % field_name
++        # http://docs.oracle.com/cd/B19306_01/server.102/b14200/functions230.htm#i1002084
++        if lookup_type in ('year', 'month'):
++            return "TRUNC(%s, '%s')" % (field_name, lookup_type.upper())
+         else:
+-            sql = "TRUNC(%s, '%s')" % (field_name, lookup_type)
+-        return sql
++            return "TRUNC(%s)" % field_name
++
++    # Oracle crashes with "ORA-03113: end-of-file on communication channel"
++    # if the time zone name is passed in parameter. Use interpolation instead.
++    # https://groups.google.com/forum/#!msg/django-developers/zwQju7hbG78/9l934yelwfsJ
++    # This regexp matches all time zone names from the zoneinfo database.
++    _tzname_re = re.compile(r'^[\w/:+-]+$')
++
++    def _convert_field_to_tz(self, field_name, tzname):
++        if not self._tzname_re.match(tzname):
++            raise ValueError("Invalid time zone name: %s" % tzname)
++        # Convert from UTC to local time, returning TIMESTAMP WITH TIME ZONE.
++        result = "(FROM_TZ(%s, '0:00') AT TIME ZONE '%s')" % (field_name, tzname)
++        # Extracting from a TIMESTAMP WITH TIME ZONE ignore the time zone.
++        # Convert to a DATETIME, which is called DATE by Oracle. There's no
++        # built-in function to do that; the easiest is to go through a string.
++        result = "TO_CHAR(%s, 'YYYY-MM-DD HH24:MI:SS')" % result
++        result = "TO_DATE(%s, 'YYYY-MM-DD HH24:MI:SS')" % result
++        # Re-convert to a TIMESTAMP because EXTRACT only handles the date part
++        # on DATE values, even though they actually store the time part.
++        return "CAST(%s AS TIMESTAMP)" % result
++
++    def datetime_extract_sql(self, lookup_type, field_name, tzname):
++        if settings.USE_TZ:
++            field_name = self._convert_field_to_tz(field_name, tzname)
++        if lookup_type == 'week_day':
++            # TO_CHAR(field, 'D') returns an integer from 1-7, where 1=Sunday.
++            sql = "TO_CHAR(%s, 'D')" % field_name
++        else:
++            # http://docs.oracle.com/cd/B19306_01/server.102/b14200/functions050.htm
++            sql = "EXTRACT(%s FROM %s)" % (lookup_type.upper(), field_name)
++        return sql, []
++
++    def datetime_trunc_sql(self, lookup_type, field_name, tzname):
++        if settings.USE_TZ:
++            field_name = self._convert_field_to_tz(field_name, tzname)
++        # http://docs.oracle.com/cd/B19306_01/server.102/b14200/functions230.htm#i1002084
++        if lookup_type in ('year', 'month'):
++            sql = "TRUNC(%s, '%s')" % (field_name, lookup_type.upper())
++        elif lookup_type == 'day':
++            sql = "TRUNC(%s)" % field_name
++        elif lookup_type == 'hour':
++            sql = "TRUNC(%s, 'HH24')" % field_name
++        elif lookup_type == 'minute':
++            sql = "TRUNC(%s, 'MI')" % field_name
++        else:
++            sql = field_name    # Cast to DATE removes sub-second precision.
++        return sql, []
+ 
+     def convert_values(self, value, field):
+         if isinstance(value, Database.LOB):
+diff --git a/django/db/backends/oracle/compiler.py b/django/db/backends/oracle/compiler.py
+index 24030cd..cbee279 100644
+--- a/django/db/backends/oracle/compiler.py
++++ b/django/db/backends/oracle/compiler.py
+@@ -71,3 +71,6 @@ class SQLAggregateCompiler(compiler.SQLAggregateCompiler, SQLCompiler):
+ 
+ class SQLDateCompiler(compiler.SQLDateCompiler, SQLCompiler):
+     pass
++
++class SQLDateTimeCompiler(compiler.SQLDateTimeCompiler, SQLCompiler):
++    pass
+diff --git a/django/db/backends/postgresql_psycopg2/operations.py b/django/db/backends/postgresql_psycopg2/operations.py
+index 40fe629..8e87ed5 100644
+--- a/django/db/backends/postgresql_psycopg2/operations.py
++++ b/django/db/backends/postgresql_psycopg2/operations.py
+@@ -1,5 +1,6 @@
+ from __future__ import unicode_literals
+ 
++from django.conf import settings
+ from django.db.backends import BaseDatabaseOperations
+ 
+ 
+@@ -36,6 +37,30 @@ class DatabaseOperations(BaseDatabaseOperations):
+         # http://www.postgresql.org/docs/8.0/static/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC
+         return "DATE_TRUNC('%s', %s)" % (lookup_type, field_name)
+ 
++    def datetime_extract_sql(self, lookup_type, field_name, tzname):
++        if settings.USE_TZ:
++            field_name = "%s AT TIME ZONE %%s" % field_name
++            params = [tzname]
++        else:
++            params = []
++        # http://www.postgresql.org/docs/8.0/static/functions-datetime.html#FUNCTIONS-DATETIME-EXTRACT
++        if lookup_type == 'week_day':
++            # For consistency across backends, we return Sunday=1, Saturday=7.
++            sql = "EXTRACT('dow' FROM %s) + 1" % field_name
++        else:
++            sql = "EXTRACT('%s' FROM %s)" % (lookup_type, field_name)
++        return sql, params
++
++    def datetime_trunc_sql(self, lookup_type, field_name, tzname):
++        if settings.USE_TZ:
++            field_name = "%s AT TIME ZONE %%s" % field_name
++            params = [tzname]
++        else:
++            params = []
++        # http://www.postgresql.org/docs/8.0/static/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC
++        sql = "DATE_TRUNC('%s', %s)" % (lookup_type, field_name)
++        return sql, params
++
+     def deferrable_sql(self):
+         return " DEFERRABLE INITIALLY DEFERRED"
+ 
+diff --git a/django/db/backends/sqlite3/base.py b/django/db/backends/sqlite3/base.py
+index f4fd1cc..3b4ff4c 100644
+--- a/django/db/backends/sqlite3/base.py
++++ b/django/db/backends/sqlite3/base.py
+@@ -35,6 +35,10 @@ except ImportError as exc:
+     from django.core.exceptions import ImproperlyConfigured
+     raise ImproperlyConfigured("Error loading either pysqlite2 or sqlite3 modules (tried in that order): %s" % exc)
+ 
++try:
++    import pytz
++except ImportError:
++    pytz = None
+ 
+ DatabaseError = Database.DatabaseError
+ IntegrityError = Database.IntegrityError
+@@ -117,6 +121,10 @@ class DatabaseFeatures(BaseDatabaseFeatures):
+         cursor.execute('DROP TABLE STDDEV_TEST')
+         return has_support
+ 
++    @cached_property
++    def has_zoneinfo_database(self):
++        return pytz is not None
++
+ class DatabaseOperations(BaseDatabaseOperations):
+     def bulk_batch_size(self, fields, objs):
+         """
+@@ -142,10 +150,10 @@ class DatabaseOperations(BaseDatabaseOperations):
+ 
+     def date_extract_sql(self, lookup_type, field_name):
+         # sqlite doesn't support extract, so we fake it with the user-defined
+-        # function django_extract that's registered in connect(). Note that
++        # function django_date_extract that's registered in connect(). Note that
+         # single quotes are used because this is a string (and could otherwise
+         # cause a collision with a field name).
+-        return "django_extract('%s', %s)" % (lookup_type.lower(), field_name)
++        return "django_date_extract('%s', %s)" % (lookup_type.lower(), field_name)
+ 
+     def date_interval_sql(self, sql, connector, timedelta):
+         # It would be more straightforward if we could use the sqlite strftime
+@@ -154,7 +162,7 @@ class DatabaseOperations(BaseDatabaseOperations):
+         # values differently. So instead we register our own function that
+         # formats the datetime combined with the delta in a manner suitable
+         # for comparisons.
+-        return  'django_format_dtdelta(%s, "%s", "%d", "%d", "%d")' % (sql,
++        return 'django_format_dtdelta(%s, "%s", "%d", "%d", "%d")' % (sql,
+             connector, timedelta.days, timedelta.seconds, timedelta.microseconds)
+ 
+     def date_trunc_sql(self, lookup_type, field_name):
+@@ -164,6 +172,26 @@ class DatabaseOperations(BaseDatabaseOperations):
+         # cause a collision with a field name).
+         return "django_date_trunc('%s', %s)" % (lookup_type.lower(), field_name)
+ 
++    def datetime_extract_sql(self, lookup_type, field_name, tzname):
++        # Same comment as in date_extract_sql.
++        if settings.USE_TZ:
++            if pytz is None:
++                from django.core.exceptions import ImproperlyConfigured
++                raise ImproperlyConfigured("This query requires pytz, "
++                                           "but it isn't installed.")
++        return "django_datetime_extract('%s', %s, %%s)" % (
++            lookup_type.lower(), field_name), [tzname]
++
++    def datetime_trunc_sql(self, lookup_type, field_name, tzname):
++        # Same comment as in date_trunc_sql.
++        if settings.USE_TZ:
++            if pytz is None:
++                from django.core.exceptions import ImproperlyConfigured
++                raise ImproperlyConfigured("This query requires pytz, "
++                                           "but it isn't installed.")
++        return "django_datetime_trunc('%s', %s, %%s)" % (
++            lookup_type.lower(), field_name), [tzname]
++
+     def drop_foreignkey_sql(self):
+         return ""
+ 
+@@ -214,11 +242,6 @@ class DatabaseOperations(BaseDatabaseOperations):
+ 
+         return six.text_type(value)
+ 
+-    def year_lookup_bounds(self, value):
+-        first = '%s-01-01'
+-        second = '%s-12-31 23:59:59.999999'
+-        return [first % value, second % value]
+-
+     def convert_values(self, value, field):
+         """SQLite returns floats when it should be returning decimals,
+         and gets dates and datetimes wrong.
+@@ -310,9 +333,10 @@ class DatabaseWrapper(BaseDatabaseWrapper):
+ 
+     def get_new_connection(self, conn_params):
+         conn = Database.connect(**conn_params)
+-        # Register extract, date_trunc, and regexp functions.
+-        conn.create_function("django_extract", 2, _sqlite_extract)
++        conn.create_function("django_date_extract", 2, _sqlite_date_extract)
+         conn.create_function("django_date_trunc", 2, _sqlite_date_trunc)
++        conn.create_function("django_datetime_extract", 3, _sqlite_datetime_extract)
++        conn.create_function("django_datetime_trunc", 3, _sqlite_datetime_trunc)
+         conn.create_function("regexp", 2, _sqlite_regexp)
+         conn.create_function("django_format_dtdelta", 5, _sqlite_format_dtdelta)
+         return conn
+@@ -402,7 +426,7 @@ class SQLiteCursorWrapper(Database.Cursor):
+     def convert_query(self, query):
+         return FORMAT_QMARK_REGEX.sub('?', query).replace('%%','%')
+ 
+-def _sqlite_extract(lookup_type, dt):
++def _sqlite_date_extract(lookup_type, dt):
+     if dt is None:
+         return None
+     try:
+@@ -420,11 +444,45 @@ def _sqlite_date_trunc(lookup_type, dt):
+     except (ValueError, TypeError):
+         return None
+     if lookup_type == 'year':
++        return "%i-01-01" % dt.year
++    elif lookup_type == 'month':
++        return "%i-%02i-01" % (dt.year, dt.month)
++    elif lookup_type == 'day':
++        return "%i-%02i-%02i" % (dt.year, dt.month, dt.day)
++
++def _sqlite_datetime_extract(lookup_type, dt, tzname):
++    if dt is None:
++        return None
++    try:
++        dt = util.typecast_timestamp(dt)
++    except (ValueError, TypeError):
++        return None
++    if tzname is not None:
++        dt = timezone.localtime(dt, pytz.timezone(tzname))
++    if lookup_type == 'week_day':
++        return (dt.isoweekday() % 7) + 1
++    else:
++        return getattr(dt, lookup_type)                      ######################getattr
++
++def _sqlite_datetime_trunc(lookup_type, dt, tzname):
++    try:
++        dt = util.typecast_timestamp(dt)
++    except (ValueError, TypeError):
++        return None
++    if tzname is not None:
++        dt = timezone.localtime(dt, pytz.timezone(tzname))
++    if lookup_type == 'year':
+         return "%i-01-01 00:00:00" % dt.year
+     elif lookup_type == 'month':
+         return "%i-%02i-01 00:00:00" % (dt.year, dt.month)
+     elif lookup_type == 'day':
+         return "%i-%02i-%02i 00:00:00" % (dt.year, dt.month, dt.day)
++    elif lookup_type == 'hour':
++        return "%i-%02i-%02i %02i:00:00" % (dt.year, dt.month, dt.day, dt.hour)
++    elif lookup_type == 'minute':
++        return "%i-%02i-%02i %02i:%02i:00" % (dt.year, dt.month, dt.day, dt.hour, dt.minute)
++    elif lookup_type == 'second':
++        return "%i-%02i-%02i %02i:%02i:%02i" % (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+ 
+ def _sqlite_format_dtdelta(dt, conn, days, secs, usecs):
+     try:
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 94abfd7..b70d235 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -312,9 +312,10 @@ class Field(object):
+             return value._prepare()
+ 
+         if lookup_type in (
+-                'regex', 'iregex', 'month', 'day', 'week_day', 'search',
+-                'contains', 'icontains', 'iexact', 'startswith', 'istartswith',
+-                'endswith', 'iendswith', 'isnull'
++                'iexact', 'contains', 'icontains',
++                'startswith', 'istartswith', 'endswith', 'iendswith',
++                'month', 'day', 'week_day', 'hour', 'minute', 'second',
++                'isnull', 'search', 'regex', 'iregex',
+             ):
+             return value
+         elif lookup_type in ('exact', 'gt', 'gte', 'lt', 'lte'):
+@@ -350,8 +351,8 @@ class Field(object):
+                 sql, params = value._as_sql(connection=connection)
+             return QueryWrapper(('(%s)' % sql), params)
+ 
+-        if lookup_type in ('regex', 'iregex', 'month', 'day', 'week_day',
+-                           'search'):
++        if lookup_type in ('month', 'day', 'week_day', 'hour', 'minute',
++                           'second', 'search', 'regex', 'iregex'):
+             return [value]
+         elif lookup_type in ('exact', 'gt', 'gte', 'lt', 'lte'):
+             return [self.get_db_prep_value(value, connection=connection,
+@@ -370,10 +371,12 @@ class Field(object):
+         elif lookup_type == 'isnull':
+             return []
+         elif lookup_type == 'year':
+-            if self.get_internal_type() == 'DateField':
++            if isinstance(self, DateTimeField):
++                return connection.ops.year_lookup_bounds_for_datetime_field(value)                ######################isinstance
++            elif isinstance(self, DateField):                                                   ######################isinstance
+                 return connection.ops.year_lookup_bounds_for_date_field(value)
+             else:
+-                return connection.ops.year_lookup_bounds(value)
++                return [value]          # this isn't supposed to happen
+ 
+     def has_default(self):
+         """
+@@ -722,9 +725,9 @@ class DateField(Field):
+                       is_next=False))
+ 
+     def get_prep_lookup(self, lookup_type, value):
+-        # For "__month", "__day", and "__week_day" lookups, convert the value
+-        # to an int so the database backend always sees a consistent type.
+-        if lookup_type in ('month', 'day', 'week_day'):
++        # For dates lookups, convert the value to an int
++        # so the database backend always sees a consistent type.
++        if lookup_type in ('month', 'day', 'week_day', 'hour', 'minute', 'second'):
+             return int(value)
+         return super(DateField, self).get_prep_lookup(lookup_type, value)
+ 
+diff --git a/django/db/models/manager.py b/django/db/models/manager.py
+index cee2131..b1f2e10 100644
+--- a/django/db/models/manager.py
++++ b/django/db/models/manager.py
+@@ -130,6 +130,9 @@ class Manager(object):
+     def dates(self, *args, **kwargs):
+         return self.get_query_set().dates(*args, **kwargs)
+ 
++    def datetimes(self, *args, **kwargs):
++        return self.get_query_set().datetimes(*args, **kwargs)
++
+     def distinct(self, *args, **kwargs):
+         return self.get_query_set().distinct(*args, **kwargs)
+ 
+diff --git a/django/db/models/query.py b/django/db/models/query.py
+index 87bc620..0f3a79a 100644
+--- a/django/db/models/query.py
++++ b/django/db/models/query.py
+@@ -7,6 +7,7 @@ import itertools
+ import sys
+ import warnings
+ 
++from django.conf import settings
+ from django.core import exceptions
+ from django.db import connections, router, transaction, IntegrityError
+ from django.db.models.constants import LOOKUP_SEP
+@@ -17,6 +18,7 @@ from django.db.models.deletion import Collector
+ from django.db.models import sql
+ from django.utils.functional import partition
+ from django.utils import six
++from django.utils import timezone
+ 
+ # Used to control how many objects are worked with at once in some cases (e.g.
+ # when deleting objects).
+@@ -629,16 +631,33 @@ class QuerySet(object):
+ 
+     def dates(self, field_name, kind, order='ASC'):
+         """
+-        Returns a list of datetime objects representing all available dates for
++        Returns a list of date objects representing all available dates for
+         the given field_name, scoped to 'kind'.
+         """
+-        assert kind in ("month", "year", "day"), \
++        assert kind in ("year", "month", "day"), \
+                 "'kind' must be one of 'year', 'month' or 'day'."
+         assert order in ('ASC', 'DESC'), \
+                 "'order' must be either 'ASC' or 'DESC'."
+         return self._clone(klass=DateQuerySet, setup=True,
+                 _field_name=field_name, _kind=kind, _order=order)
+ 
++    def datetimes(self, field_name, kind, order='ASC', tzinfo=None):
++        """
++        Returns a list of datetime objects representing all available
++        datetimes for the given field_name, scoped to 'kind'.
++        """
++        assert kind in ("year", "month", "day", "hour", "minute", "second"), \
++                "'kind' must be one of 'year', 'month', 'day', 'hour', 'minute' or 'second'."
++        assert order in ('ASC', 'DESC'), \
++                "'order' must be either 'ASC' or 'DESC'."
++        if settings.USE_TZ:
++            if tzinfo is None:
++                tzinfo = timezone.get_current_timezone()
++        else:
++            tzinfo = None
++        return self._clone(klass=DateTimeQuerySet, setup=True,
++                _field_name=field_name, _kind=kind, _order=order, _tzinfo=tzinfo)
++
+     def none(self):
+         """
+         Returns an empty QuerySet.
+@@ -1187,7 +1206,7 @@ class DateQuerySet(QuerySet):
+         self.query.clear_deferred_loading()
+         self.query = self.query.clone(klass=sql.DateQuery, setup=True)
+         self.query.select = []
+-        self.query.add_date_select(self._field_name, self._kind, self._order)
++        self.query.add_select(self._field_name, self._kind, self._order)
+ 
+     def _clone(self, klass=None, setup=False, **kwargs):
+         c = super(DateQuerySet, self)._clone(klass, False, **kwargs)
+@@ -1198,6 +1217,32 @@ class DateQuerySet(QuerySet):
+         return c
+ 
+ 
++class DateTimeQuerySet(QuerySet):
++    def iterator(self):
++        return self.query.get_compiler(self.db).results_iter()
++
++    def _setup_query(self):
++        """
++        Sets up any special features of the query attribute.
++
++        Called by the _clone() method after initializing the rest of the
++        instance.
++        """
++        self.query.clear_deferred_loading()
++        self.query = self.query.clone(klass=sql.DateTimeQuery, setup=True, tzinfo=self._tzinfo)
++        self.query.select = []
++        self.query.add_select(self._field_name, self._kind, self._order)
++
++    def _clone(self, klass=None, setup=False, **kwargs):
++        c = super(DateTimeQuerySet, self)._clone(klass, False, **kwargs)
++        c._field_name = self._field_name
++        c._kind = self._kind
++        c._tzinfo = self._tzinfo
++        if setup and hasattr(c, '_setup_query'):
++            c._setup_query()
++        return c
++
++
+ def get_klass_info(klass, max_depth=0, cur_depth=0, requested=None,
+                    only_load=None, from_parent=None):
+     """
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index c1a690a..c82cc45 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -25,7 +25,7 @@ class QueryWrapper(object):
+     parameters. Can be used to pass opaque data to a where-clause, for example.
+     """
+     def __init__(self, sql, params):
+-        self.data = sql, params
++        self.data = sql, list(params)
+ 
+     def as_sql(self, qn=None, connection=None):
+         return self.data
+diff --git a/django/db/models/sql/aggregates.py b/django/db/models/sql/aggregates.py
+index 75a330f..3c87202 100644
+--- a/django/db/models/sql/aggregates.py
++++ b/django/db/models/sql/aggregates.py
+@@ -73,22 +73,23 @@ class Aggregate(object):
+             self.col = (change_map.get(self.col[0], self.col[0]), self.col[1])
+ 
+     def as_sql(self, qn, connection):
+-        "Return the aggregate, rendered as SQL."
++        "Return the aggregate, rendered as SQL with parameters."
++        params = []
+ 
+         if hasattr(self.col, 'as_sql'):
+-            field_name = self.col.as_sql(qn, connection)
++            field_name, params = self.col.as_sql(qn, connection)
+         elif isinstance(self.col, (list, tuple)):
+             field_name = '.'.join([qn(c) for c in self.col])
+         else:
+             field_name = self.col
+ 
+-        params = {
++        substitutions = {
+             'function': self.sql_function,
+             'field': field_name
+         }
+-        params.update(self.extra)
++        substitutions.update(self.extra)
+ 
+-        return self.sql_template % params
++        return self.sql_template % substitutions, params
+ 
+ 
+ class Avg(Aggregate):
+diff --git a/django/db/models/sql/compiler.py b/django/db/models/sql/compiler.py
+index 79b5d99..1b6654b 100644
+--- a/django/db/models/sql/compiler.py
++++ b/django/db/models/sql/compiler.py
+@@ -1,5 +1,6 @@
+-from django.utils.six.moves import zip
++import datetime
+ 
++from django.conf import settings
+ from django.core.exceptions import FieldError
+ from django.db import transaction
+ from django.db.backends.util import truncate_name
+@@ -12,6 +13,8 @@ from django.db.models.sql.expressions import SQLEvaluator
+ from django.db.models.sql.query import get_order_dir, Query
+ from django.db.utils import DatabaseError
+ from django.utils import six
++from django.utils.six.moves import zip
++from django.utils import timezone
+ 
+ 
+ class SQLCompiler(object):
+@@ -71,7 +74,7 @@ class SQLCompiler(object):
+         # as the pre_sql_setup will modify query state in a way that forbids
+         # another run of it.
+         self.refcounts_before = self.query.alias_refcount.copy()
+-        out_cols = self.get_columns(with_col_aliases)
++        out_cols, s_params = self.get_columns(with_col_aliases)
+         ordering, ordering_group_by = self.get_ordering()
+ 
+         distinct_fields = self.get_distinct()
+@@ -94,6 +97,7 @@ class SQLCompiler(object):
+             result.append(self.connection.ops.distinct_sql(distinct_fields))
+ 
+         result.append(', '.join(out_cols + self.query.ordering_aliases))
++        params.extend(s_params)
+ 
+         result.append('FROM')
+         result.extend(from_)
+@@ -161,9 +165,10 @@ class SQLCompiler(object):
+ 
+     def get_columns(self, with_aliases=False):
+         """
+-        Returns the list of columns to use in the select statement. If no
+-        columns have been specified, returns all columns relating to fields in
+-        the model.
++        Returns the list of columns to use in the select statement, as well as
++        a list any extra parameters that need to be included. If no columns
++        have been specified, returns all columns relating to fields in the
++        model.
+ 
+         If 'with_aliases' is true, any column names that are duplicated
+         (without the table names) are given unique aliases. This is needed in
+@@ -172,6 +177,7 @@ class SQLCompiler(object):
+         qn = self.quote_name_unless_alias
+         qn2 = self.connection.ops.quote_name
+         result = ['(%s) AS %s' % (col[0], qn2(alias)) for alias, col in six.iteritems(self.query.extra_select)]
++        params = []
+         aliases = set(self.query.extra_select.keys())
+         if with_aliases:
+             col_aliases = aliases.copy()
+@@ -201,7 +207,9 @@ class SQLCompiler(object):
+                         aliases.add(r)
+                         col_aliases.add(col[1])
+                 else:
+-                    result.append(col.as_sql(qn, self.connection))
++                    col_sql, col_params = col.as_sql(qn, self.connection)
++                    result.append(col_sql)
++                    params.extend(col_params)
+ 
+                     if hasattr(col, 'alias'):
+                         aliases.add(col.alias)
+@@ -214,15 +222,13 @@ class SQLCompiler(object):
+             aliases.update(new_aliases)
+ 
+         max_name_length = self.connection.ops.max_name_length()
+-        result.extend([
+-            '%s%s' % (
+-                aggregate.as_sql(qn, self.connection),
+-                alias is not None
+-                    and ' AS %s' % qn(truncate_name(alias, max_name_length))
+-                    or ''
+-            )
+-            for alias, aggregate in self.query.aggregate_select.items()
+-        ])
++        for alias, aggregate in self.query.aggregate_select.items():
++            agg_sql, agg_params = aggregate.as_sql(qn, self.connection)
++            if alias is None:
++                result.append(agg_sql)
++            else:
++                result.append('%s AS %s' % (agg_sql, qn(truncate_name(alias, max_name_length))))
++            params.extend(agg_params)
+ 
+         for (table, col), _ in self.query.related_select_cols:
+             r = '%s.%s' % (qn(table), qn(col))
+@@ -237,7 +243,7 @@ class SQLCompiler(object):
+                 col_aliases.add(col)
+ 
+         self._select_aliases = aliases
+-        return result
++        return result, params
+ 
+     def get_default_columns(self, with_aliases=False, col_aliases=None,
+             start_alias=None, opts=None, as_pairs=False, from_parent=None):
+@@ -542,14 +548,16 @@ class SQLCompiler(object):
+             seen = set()
+             cols = self.query.group_by + select_cols
+             for col in cols:
++                col_params = ()
+                 if isinstance(col, (list, tuple)):
+                     sql = '%s.%s' % (qn(col[0]), qn(col[1]))
+                 elif hasattr(col, 'as_sql'):
+-                    sql = col.as_sql(qn, self.connection)
++                    sql, col_params = col.as_sql(qn, self.connection)
+                 else:
+                     sql = '(%s)' % str(col)
+                 if sql not in seen:
+                     result.append(sql)
++                    params.extend(col_params)
+                     seen.add(sql)
+ 
+             # Still, we need to add all stuff in ordering (except if the backend can
+@@ -988,15 +996,17 @@ class SQLAggregateCompiler(SQLCompiler):
+         if qn is None:
+             qn = self.quote_name_unless_alias
+ 
+-        sql = ('SELECT %s FROM (%s) subquery' % (
+-            ', '.join([
+-                aggregate.as_sql(qn, self.connection)
+-                for aggregate in self.query.aggregate_select.values()
+-            ]),
+-            self.query.subquery)
+-        )
+-        params = self.query.sub_params
+-        return (sql, params)
++        sql, params = [], []
++        for aggregate in self.query.aggregate_select.values():
++            agg_sql, agg_params = aggregate.as_sql(qn, self.connection)
++            sql.append(agg_sql)
++            params.extend(agg_params)
++        sql = ', '.join(sql)
++        params = tuple(params)
++
++        sql = 'SELECT %s FROM (%s) subquery' % (sql, self.query.subquery)
++        params = params + self.query.sub_params
++        return sql, params
+ 
+ class SQLDateCompiler(SQLCompiler):
+     def results_iter(self):
+@@ -1005,10 +1015,10 @@ class SQLDateCompiler(SQLCompiler):
+         """
+         resolve_columns = hasattr(self, 'resolve_columns')
+         if resolve_columns:
+-            from django.db.models.fields import DateTimeField
+-            fields = [DateTimeField()]
++            from django.db.models.fields import DateField
++            fields = [DateField()]
+         else:
+-            from django.db.backends.util import typecast_timestamp
++            from django.db.backends.util import typecast_date
+             needs_string_cast = self.connection.features.needs_datetime_string_cast
+ 
+         offset = len(self.query.extra_select)
+@@ -1018,9 +1028,38 @@ class SQLDateCompiler(SQLCompiler):
+                 if resolve_columns:
+                     date = self.resolve_columns(row, fields)[offset]
+                 elif needs_string_cast:
+-                    date = typecast_timestamp(str(date))
++                    date = typecast_date(str(date))
++                if isinstance(date, datetime.datetime):             ######################isinstance
++                    date = date.date()
+                 yield date
+ 
++class SQLDateTimeCompiler(SQLCompiler):
++    def results_iter(self):
++        """
++        Returns an iterator over the results from executing this query.
++        """
++        resolve_columns = hasattr(self, 'resolve_columns')               ######################hasattr
++        if resolve_columns:
++            from django.db.models.fields import DateTimeField
++            fields = [DateTimeField()]
++        else:
++            from django.db.backends.util import typecast_timestamp
++            needs_string_cast = self.connection.features.needs_datetime_string_cast
++
++        offset = len(self.query.extra_select)
++        for rows in self.execute_sql(MULTI):
++            for row in rows:
++                datetime = row[offset]
++                if resolve_columns:
++                    datetime = self.resolve_columns(row, fields)[offset]
++                elif needs_string_cast:
++                    datetime = typecast_timestamp(str(datetime))
++                # Datetimes are artifically returned in UTC on databases that
++                # don't support time zone. Restore the zone used in the query.
++                if settings.USE_TZ:
++                    datetime = datetime.replace(tzinfo=None)
++                    datetime = timezone.make_aware(datetime, self.query.tzinfo)
++                yield datetime
+ 
+ def order_modified_iter(cursor, trim, sentinel):
+     """
+diff --git a/django/db/models/sql/constants.py b/django/db/models/sql/constants.py
+index 1764db7..81bd646 100644
+--- a/django/db/models/sql/constants.py
++++ b/django/db/models/sql/constants.py
+@@ -11,7 +11,8 @@ import re
+ QUERY_TERMS = set([
+     'exact', 'iexact', 'contains', 'icontains', 'gt', 'gte', 'lt', 'lte', 'in',
+     'startswith', 'istartswith', 'endswith', 'iendswith', 'range', 'year',
+-    'month', 'day', 'week_day', 'isnull', 'search', 'regex', 'iregex',
++    'month', 'day', 'week_day', 'hour', 'minute', 'second', 'isnull', 'search',
++    'regex', 'iregex',
+ ])
+ 
+ # Size of each "chunk" for get_iterator calls.
+diff --git a/django/db/models/sql/datastructures.py b/django/db/models/sql/datastructures.py
+index b8e06da..612eb8f 100644
+--- a/django/db/models/sql/datastructures.py
++++ b/django/db/models/sql/datastructures.py
+@@ -40,4 +40,25 @@ class Date(object):
+             col = '%s.%s' % tuple([qn(c) for c in self.col])
+         else:
+             col = self.col
+-        return connection.ops.date_trunc_sql(self.lookup_type, col)
++        return connection.ops.date_trunc_sql(self.lookup_type, col), []
++
++class DateTime(object):
++    """
++    Add a datetime selection column.
++    """
++    def __init__(self, col, lookup_type, tzname):
++        self.col = col
++        self.lookup_type = lookup_type
++        self.tzname = tzname
++
++    def relabel_aliases(self, change_map):
++        c = self.col
++        if isinstance(c, (list, tuple)):                           ######################isinstance
++            self.col = (change_map.get(c[0], c[0]), c[1])
++
++    def as_sql(self, qn, connection):
++        if isinstance(self.col, (list, tuple)):                   ######################isinstance
++            col = '%s.%s' % tuple([qn(c) for c in self.col])         
++        else:
++            col = self.col
++        return connection.ops.datetime_trunc_sql(self.lookup_type, col, self.tzname)
+diff --git a/django/db/models/sql/expressions.py b/django/db/models/sql/expressions.py
+index a4c1d85..2a5008f 100644
+--- a/django/db/models/sql/expressions.py
++++ b/django/db/models/sql/expressions.py
+@@ -94,9 +94,9 @@ class SQLEvaluator(object):
+         if col is None:
+             raise ValueError("Given node not found")
+         if hasattr(col, 'as_sql'):
+-            return col.as_sql(qn, connection), ()
++            return col.as_sql(qn, connection)
+         else:
+-            return '%s.%s' % (qn(col[0]), qn(col[1])), ()
++            return '%s.%s' % (qn(col[0]), qn(col[1])), []
+ 
+     def evaluate_date_modifier_node(self, node, qn, connection):
+         timedelta = node.children.pop()
+diff --git a/django/db/models/sql/subqueries.py b/django/db/models/sql/subqueries.py
+index 6072804..6aac5c8 100644
+--- a/django/db/models/sql/subqueries.py
++++ b/django/db/models/sql/subqueries.py
+@@ -2,22 +2,23 @@
+ Query subclasses which provide extra functionality beyond simple data retrieval.
+ """
+ 
++from django.conf import settings
+ from django.core.exceptions import FieldError
+ from django.db import connections
+ from django.db.models.constants import LOOKUP_SEP
+-from django.db.models.fields import DateField, FieldDoesNotExist
++from django.db.models.fields import DateField, DateTimeField, FieldDoesNotExist
+ from django.db.models.sql.constants import *
+-from django.db.models.sql.datastructures import Date
++from django.db.models.sql.datastructures import Date, DateTime
+ from django.db.models.sql.query import Query
+ from django.db.models.sql.where import AND, Constraint
+-from django.utils.datastructures import SortedDict
+ from django.utils.functional import Promise
+ from django.utils.encoding import force_text
+ from django.utils import six
++from django.utils import timezone
+ 
+ 
+ __all__ = ['DeleteQuery', 'UpdateQuery', 'InsertQuery', 'DateQuery',
+-        'AggregateQuery']
++        'DateTimeQuery', 'AggregateQuery']
+ 
+ class DeleteQuery(Query):
+     """
+@@ -223,9 +224,9 @@ class DateQuery(Query):
+ 
+     compiler = 'SQLDateCompiler'
+ 
+-    def add_date_select(self, field_name, lookup_type, order='ASC'):
++    def add_select(self, field_name, lookup_type, order='ASC'):
+         """
+-        Converts the query into a date extraction query.
++        Converts the query into an extraction query.
+         """
+         try:
+             result = self.setup_joins(
+@@ -238,10 +239,9 @@ class DateQuery(Query):
+                 self.model._meta.object_name, field_name
+             ))
+         field = result[0]
+-        assert isinstance(field, DateField), "%r isn't a DateField." \                         ######################isinstance
+-                % field.name
++        self._check_field(field)                # overridden in DateTimeQuery
+         alias = result[3][-1]
+-        select = Date((alias, field.column), lookup_type)
++        select = self._get_select((alias, field.column), lookup_type)
+         self.clear_select_clause()
+         self.select = [SelectInfo(select, None)]
+         self.distinct = True
+@@ -250,6 +250,36 @@ class DateQuery(Query):
+         if field.null:
+             self.add_filter(("%s__isnull" % field_name, False))
+ 
++    def _check_field(self, field):
++        assert isinstance(field, DateField), \                                       ######################isinstance
++            "%r isn't a DateField." % field.name
++        if settings.USE_TZ:
++            assert not isinstance(field, DateTimeField), \                           ######################isinstance
++                "%r is a DateTimeField, not a DateField." % field.name
++
++    def _get_select(self, col, lookup_type):
++        return Date(col, lookup_type)
++
++class DateTimeQuery(DateQuery):
++    """
++    A DateTimeQuery is like a DateQuery but for a datetime field. If time zone
++    support is active, the tzinfo attribute contains the time zone to use for
++    converting the values before truncating them. Otherwise it's set to None.
++    """
++
++    compiler = 'SQLDateTimeCompiler'
++
++    def _check_field(self, field):
++        assert isinstance(field, DateTimeField), \                                     ######################isinstance
++                "%r isn't a DateTimeField." % field.name
++
++    def _get_select(self, col, lookup_type):
++        if self.tzinfo is None:
++            tzname = None
++        else:
++            tzname = timezone._get_timezone_name(self.tzinfo)
++        return DateTime(col, lookup_type, tzname)
++
+ class AggregateQuery(Query):
+     """
+     An AggregateQuery takes another query as a parameter to the FROM
+diff --git a/django/db/models/sql/where.py b/django/db/models/sql/where.py
+index cbb0546..ef85689 100644
+--- a/django/db/models/sql/where.py
++++ b/django/db/models/sql/where.py
+@@ -8,11 +8,13 @@ import collections
+ import datetime
+ from itertools import repeat
+ 
+-from django.utils import tree
+-from django.db.models.fields import Field
++from django.conf import settings
++from django.db.models.fields import DateTimeField, Field
+ from django.db.models.sql.datastructures import EmptyResultSet, Empty
+ from django.db.models.sql.aggregates import Aggregate
+ from django.utils.six.moves import xrange
++from django.utils import timezone
++from django.utils import tree
+ 
+ # Connection types
+ AND = 'AND'
+@@ -60,7 +62,8 @@ class WhereNode(tree.Node):
+         # about the value(s) to the query construction. Specifically, datetime
+         # and empty values need special handling. Other types could be used
+         # here in the future (using Python types is suggested for consistency).
+-        if isinstance(value, datetime.datetime):                                   ######################isinstance
++        if (isinstance(value, datetime.datetime)                                     ######################isinstance
++            or (isinstance(obj.field, DateTimeField) and lookup_type != 'isnull')):
+             value_annotation = datetime.datetime
+         elif hasattr(value, 'value_annotation'):
+             value_annotation = value.value_annotation
+@@ -169,15 +172,13 @@ class WhereNode(tree.Node):
+ 
+         if isinstance(lvalue, tuple):
+             # A direct database column lookup.
+-            field_sql = self.sql_for_columns(lvalue, qn, connection)
++            field_sql, field_params = self.sql_for_columns(lvalue, qn, connection), []
+         else:
+             # A smart object with an as_sql() method.
+-            field_sql = lvalue.as_sql(qn, connection)
++            field_sql, field_params = lvalue.as_sql(qn, connection)
+ 
+-        if value_annotation is datetime.datetime:
+-            cast_sql = connection.ops.datetime_cast_sql()
+-        else:
+-            cast_sql = '%s'
++        is_datetime_field = value_annotation is datetime.datetime
++        cast_sql = connection.ops.datetime_cast_sql() if is_datetime_field else '%s'
+ 
+         if hasattr(params, 'as_sql'):
+             extra, params = params.as_sql(qn, connection)
+@@ -185,6 +186,8 @@ class WhereNode(tree.Node):
+         else:
+             extra = ''
+ 
++        params = field_params + params
++
+         if (len(params) == 1 and params[0] == '' and lookup_type == 'exact'
+             and connection.features.interprets_empty_strings_as_nulls):
+             lookup_type = 'isnull'
+@@ -221,9 +224,14 @@ class WhereNode(tree.Node):
+                         params)
+         elif lookup_type in ('range', 'year'):
+             return ('%s BETWEEN %%s and %%s' % field_sql, params)
++        elif is_datetime_field and lookup_type in ('month', 'day', 'week_day',
++                                                   'hour', 'minute', 'second'):
++            tzname = timezone.get_current_timezone_name() if settings.USE_TZ else None
++            sql, tz_params = connection.ops.datetime_extract_sql(lookup_type, field_sql, tzname)
++            return ('%s = %%s' % sql, tz_params + params)
+         elif lookup_type in ('month', 'day', 'week_day'):
+-            return ('%s = %%s' % connection.ops.date_extract_sql(lookup_type, field_sql),
+-                    params)
++            return ('%s = %%s'
++                    % connection.ops.date_extract_sql(lookup_type, field_sql), params)
+         elif lookup_type == 'isnull':
+             assert value_annotation in (True, False), "Invalid value_annotation for isnull"
+             return ('%s IS %sNULL' % (field_sql, ('' if value_annotation else 'NOT ')), ())
+@@ -238,7 +246,7 @@ class WhereNode(tree.Node):
+         """
+         Returns the SQL fragment used for the left-hand side of a column
+         constraint (for example, the "T1.foo" portion in the clause
+-        "WHERE ... T1.foo = 6").
++        "WHERE ... T1.foo = 6") and a list of parameters.
+         """
+         table_alias, name, db_type = data
+         if table_alias:
+@@ -331,7 +339,7 @@ class ExtraWhere(object):
+ 
+     def as_sql(self, qn=None, connection=None):
+         sqls = ["(%s)" % sql for sql in self.sqls]
+-        return " AND ".join(sqls), tuple(self.params or ())
++        return " AND ".join(sqls), list(self.params or ())
+ 
+     def clone(self):
+         return self
+diff --git a/django/views/generic/dates.py b/django/views/generic/dates.py
+index 9ffaca4..29efc7d 100644
+--- a/django/views/generic/dates.py
++++ b/django/views/generic/dates.py
+@@ -379,15 +379,18 @@ class BaseDateListView(MultipleObjectMixin, DateMixin, View):
+ 
+     def get_date_list(self, queryset, date_type=None, ordering='ASC'):
+         """
+-        Get a date list by calling `queryset.dates()`, checking along the way
+-        for empty lists that aren't allowed.
++        Get a date list by calling `queryset.dates/datetimes()`, checking
++        along the way for empty lists that aren't allowed.
+         """
+         date_field = self.get_date_field()
+         allow_empty = self.get_allow_empty()
+         if date_type is None:
+             date_type = self.get_date_list_period()
+ 
+-        date_list = queryset.dates(date_field, date_type, ordering)
++        if self.uses_datetime_field:
++            date_list = queryset.datetimes(date_field, date_type, ordering)
++        else:
++            date_list = queryset.dates(date_field, date_type, ordering)
+         if date_list is not None and not date_list and not allow_empty:
+             name = force_text(queryset.model._meta.verbose_name_plural)
+             raise Http404(_("No %(verbose_name_plural)s available") %
+diff --git a/docs/ref/models/querysets.txt b/docs/ref/models/querysets.txt
+index 171c2d3..f77f87d 100644
+--- a/docs/ref/models/querysets.txt
++++ b/docs/ref/models/querysets.txt
+@@ -550,14 +550,19 @@ dates
+ .. method:: dates(field, kind, order='ASC')
+ 
+ Returns a ``DateQuerySet`` — a ``QuerySet`` that evaluates to a list of
+-``datetime.datetime`` objects representing all available dates of a particular
+-kind within the contents of the ``QuerySet``.
++:class:`datetime.date` objects representing all available dates of a
++particular kind within the contents of the ``QuerySet``.
+ 
+-``field`` should be the name of a ``DateField`` or ``DateTimeField`` of your
+-model.
++.. versionchanged:: 1.6
++    ``dates`` used to return a list of :class:`datetime.datetime` objects.
++
++``field`` should be the name of a ``DateField`` of your model.
++
++.. versionchanged:: 1.6
++    ``dates`` used to accept operating on a ``DateTimeField``.
+ 
+ ``kind`` should be either ``"year"``, ``"month"`` or ``"day"``. Each
+-``datetime.datetime`` object in the result list is "truncated" to the given
++``datetime.date`` object in the result list is "truncated" to the given
+ ``type``.
+ 
+ * ``"year"`` returns a list of all distinct year values for the field.
+@@ -572,21 +577,60 @@ model.
+ Examples::
+ 
+     >>> Entry.objects.dates('pub_date', 'year')
+-    [datetime.datetime(2005, 1, 1)]
++    [datetime.date(2005, 1, 1)]
+     >>> Entry.objects.dates('pub_date', 'month')
+-    [datetime.datetime(2005, 2, 1), datetime.datetime(2005, 3, 1)]
++    [datetime.date(2005, 2, 1), datetime.date(2005, 3, 1)]
+     >>> Entry.objects.dates('pub_date', 'day')
+-    [datetime.datetime(2005, 2, 20), datetime.datetime(2005, 3, 20)]
++    [datetime.date(2005, 2, 20), datetime.date(2005, 3, 20)]
+     >>> Entry.objects.dates('pub_date', 'day', order='DESC')
+-    [datetime.datetime(2005, 3, 20), datetime.datetime(2005, 2, 20)]
++    [datetime.date(2005, 3, 20), datetime.date(2005, 2, 20)]
+     >>> Entry.objects.filter(headline__contains='Lennon').dates('pub_date', 'day')
+-    [datetime.datetime(2005, 3, 20)]
++    [datetime.date(2005, 3, 20)]
+ 
+-.. warning::
++datetimes
++~~~~~~~~~
++
++.. versionadded:: 1.6
++
++.. method:: datetimes(field, kind, order='ASC', tzinfo=None)
++
++Returns a ``DateTimeQuerySet`` — a ``QuerySet`` that evaluates to a list of
++:class:`datetime.datetime` objects representing all available dates of a
++particular kind within the contents of the ``QuerySet``.
++
++``field`` should be the name of a ``DateTimeField`` of your model.
++
++``kind`` should be either ``"year"``, ``"month"``, ``"day"``, ``"hour"``,
++``"minute"`` or ``"second"``. Each ``datetime.datetime`` object in the result
++list is "truncated" to the given ``type``.
++
++``order``, which defaults to ``'ASC'``, should be either ``'ASC'`` or
++``'DESC'``. This specifies how to order the results.
++
++``tzinfo`` defines the time zone to which datetimes are converted prior to
++truncation. Indeed, a given datetime has different representations depending
++on the time zone in use. This parameter must be a :class:`datetime.tzinfo`
++object. If it's ``None``, Django uses the :ref:`current time zone
++<default-current-time-zone>`. It has no effect when :setting:`USE_TZ` is
++``False``.
++
++.. _database-time-zone-definitions:
++
++.. note::
+ 
+-    When :doc:`time zone support </topics/i18n/timezones>` is enabled, Django
+-    uses UTC in the database connection, which means the aggregation is
+-    performed in UTC. This is a known limitation of the current implementation.
++    This function performs time zone conversions directly in the database.
++    As a consequence, your database must be able to interpret the value of
++    ``tzinfo.tzname(None)``. This translates into the following requirements:
++
++    - SQLite: install pytz_ — conversions are actually performed in Python.
++    - PostgreSQL: no requirements (see `Time Zones`_).
++    - Oracle: no requirements (see `Choosing a Time Zone File`_).
++    - MySQL: load the time zone tables with `mysql_tzinfo_to_sql`_.
++
++    .. _pytz: http://pytz.sourceforge.net/
++    .. _Time Zones: http://www.postgresql.org/docs/9.2/static/datatype-datetime.html#DATATYPE-TIMEZONES
++    .. _Choosing a Time Zone File: http://docs.oracle.com/cd/B19306_01/server.102/b14225/ch4datetime.htm#i1006667
++    .. _mysql_tzinfo_to_sql: http://dev.mysql.com/doc/refman/5.5/en/mysql-tzinfo-to-sql.html
+ 
+ none
+ ~~~~
+@@ -2020,7 +2064,7 @@ numbers and even characters.
+ year
+ ~~~~
+ 
+-For date/datetime fields, exact year match. Takes a four-digit year.
++For date and datetime fields, an exact year match. Takes an integer year.
+ 
+ Example::
+ 
+@@ -2032,6 +2076,9 @@ SQL equivalent::
+ 
+ (The exact SQL syntax varies for each database engine.)
+ 
++When :setting:`USE_TZ` is ``True``, datetime fields are converted to the
++current time zone before filtering.
++
+ .. fieldlookup:: month
+ 
+ month
+@@ -2050,12 +2097,15 @@ SQL equivalent::
+ 
+ (The exact SQL syntax varies for each database engine.)
+ 
++When :setting:`USE_TZ` is ``True``, datetime fields are converted to the
++current time zone before filtering.
++
+ .. fieldlookup:: day
+ 
+ day
+ ~~~
+ 
+-For date and datetime fields, an exact day match.
++For date and datetime fields, an exact day match. Takes an integer day.
+ 
+ Example::
+ 
+@@ -2070,6 +2120,9 @@ SQL equivalent::
+ Note this will match any record with a pub_date on the third day of the month,
+ such as January 3, July 3, etc.
+ 
++When :setting:`USE_TZ` is ``True``, datetime fields are converted to the
++current time zone before filtering.
++
+ .. fieldlookup:: week_day
+ 
+ week_day
+@@ -2091,12 +2144,74 @@ Note this will match any record with a ``pub_date`` that falls on a Monday (day
+ 2 of the week), regardless of the month or year in which it occurs. Week days
+ are indexed with day 1 being Sunday and day 7 being Saturday.
+ 
+-.. warning::
++When :setting:`USE_TZ` is ``True``, datetime fields are converted to the
++current time zone before filtering.
++
++.. fieldlookup:: hour
++
++hour
++~~~~
++
++.. versionadded:: 1.6
++
++For datetime fields, an exact hour match. Takes an integer between 0 and 23.
++
++Example::
++
++    Event.objects.filter(timestamp__hour=23)
++
++SQL equivalent::
++
++    SELECT ... WHERE EXTRACT('hour' FROM timestamp) = '23';
++
++(The exact SQL syntax varies for each database engine.)
++
++When :setting:`USE_TZ` is ``True``, values are converted to the current time
++zone before filtering.
++
++.. fieldlookup:: minute
++
++minute
++~~~~~~
++
++.. versionadded:: 1.6
++
++For datetime fields, an exact minute match. Takes an integer between 0 and 59.
++
++Example::
++
++    Event.objects.filter(timestamp__minute=29)
++
++SQL equivalent::
++
++    SELECT ... WHERE EXTRACT('minute' FROM timestamp) = '29';
++
++(The exact SQL syntax varies for each database engine.)
++
++When :setting:`USE_TZ` is ``True``, values are converted to the current time
++zone before filtering.
++
++.. fieldlookup:: second
++
++second
++~~~~~~
++
++.. versionadded:: 1.6
++
++For datetime fields, an exact second match. Takes an integer between 0 and 59.
++
++Example::
++
++    Event.objects.filter(timestamp__second=31)
++
++SQL equivalent::
++
++    SELECT ... WHERE EXTRACT('second' FROM timestamp) = '31';
++
++(The exact SQL syntax varies for each database engine.)
+ 
+-    When :doc:`time zone support </topics/i18n/timezones>` is enabled, Django
+-    uses UTC in the database connection, which means the ``year``, ``month``,
+-    ``day`` and ``week_day`` lookups are performed in UTC. This is a known
+-    limitation of the current implementation.
++When :setting:`USE_TZ` is ``True``, values are converted to the current time
++zone before filtering.
+ 
+ .. fieldlookup:: isnull
+ 
+diff --git a/docs/releases/1.6.txt b/docs/releases/1.6.txt
+index 60537ac..9594481 100644
+--- a/docs/releases/1.6.txt
++++ b/docs/releases/1.6.txt
+@@ -30,6 +30,16 @@ prevention <clickjacking-prevention>` are turned on.
+ If the default templates don't suit your tastes, you can use :ref:`custom
+ project and app templates <custom-app-and-project-templates>`.
+ 
++Time zone aware aggregation
++~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++The support for :doc:`time zones </topics/i18n/timezones>` introduced in
++Django 1.4 didn't work well with :meth:`QuerySet.dates()
++<django.db.models.query.QuerySet.dates>`: aggregation was always performed in
++UTC. This limitation was lifted in Django 1.6. Use :meth:`QuerySet.datetimes()
++<django.db.models.query.QuerySet.datetimes>` to perform time zone aware
++aggregation on a :class:`~django.db.models.DateTimeField`.
++
+ Minor features
+ ~~~~~~~~~~~~~~
+ 
+@@ -47,6 +57,9 @@ Minor features
+ * Added :meth:`~django.db.models.query.QuerySet.earliest` for symmetry with
+   :meth:`~django.db.models.query.QuerySet.latest`.
+ 
++* In addition to :lookup:`year`, :lookup:`month` and :lookup:`day`, the ORM
++  now supports :lookup:`hour`, :lookup:`minute` and :lookup:`second` lookups.
++
+ * The default widgets for :class:`~django.forms.EmailField` and
+   :class:`~django.forms.URLField` use the new type attributes available in
+   HTML5 (type='email', type='url').
+@@ -80,6 +93,28 @@ Backwards incompatible changes in 1.6
+   :meth:`~django.db.models.query.QuerySet.none` has been called:
+   ``isinstance(qs.none(), EmptyQuerySet)``
+ 
++* :meth:`QuerySet.dates() <django.db.models.query.QuerySet.dates>` raises an
++  error if it's used on :class:`~django.db.models.DateTimeField` when time
++  zone support is active. Use :meth:`QuerySet.datetimes()
++  <django.db.models.query.QuerySet.datetimes>` instead.
++
++* :meth:`QuerySet.dates() <django.db.models.query.QuerySet.dates>` returns a
++  list of :class:`~datetime.date`. It used to return a list of
++  :class:`~datetime.datetime`.
++
++* The :attr:`~django.contrib.admin.ModelAdmin.date_hierarchy` feature of the
++  admin on a :class:`~django.db.models.DateTimeField` requires time zone
++  definitions in the database when :setting:`USE_TZ` is ``True``.
++  :ref:`Learn more <database-time-zone-definitions>`.
++
++* Accessing ``date_list`` in the context of a date-based generic view requires
++  time zone definitions in the database when the view is based on a
++  :class:`~django.db.models.DateTimeField` and :setting:`USE_TZ` is ``True``.
++  :ref:`Learn more <database-time-zone-definitions>`.
++
++* Model fields named ``hour``, ``minute`` or ``second`` may clash with the new
++  lookups. Append an explicit :lookup:`exact` lookup if this is an issue.
++
+ * If your CSS/Javascript code used to access HTML input widgets by type, you
+   should review it as ``type='text'`` widgets might be now output as
+   ``type='email'`` or ``type='url'`` depending on their corresponding field type.
+diff --git a/tests/modeltests/aggregation/tests.py b/tests/modeltests/aggregation/tests.py
+index c23b32f..c635e6e 100644
+--- a/tests/modeltests/aggregation/tests.py
++++ b/tests/modeltests/aggregation/tests.py
+@@ -579,9 +579,9 @@ class BaseAggregateTestCase(TestCase):
+         dates = Book.objects.annotate(num_authors=Count("authors")).dates('pubdate', 'year')
+         self.assertQuerysetEqual(
+             dates, [
+-                "datetime.datetime(1991, 1, 1, 0, 0)",
+-                "datetime.datetime(1995, 1, 1, 0, 0)",
+-                "datetime.datetime(2007, 1, 1, 0, 0)",
+-                "datetime.datetime(2008, 1, 1, 0, 0)"
++                "datetime.date(1991, 1, 1)",
++                "datetime.date(1995, 1, 1)",
++                "datetime.date(2007, 1, 1)",
++                "datetime.date(2008, 1, 1)"
+             ]
+         )
+diff --git a/tests/modeltests/basic/tests.py b/tests/modeltests/basic/tests.py
+index 1ca4f20..e408df8 100644
+--- a/tests/modeltests/basic/tests.py
++++ b/tests/modeltests/basic/tests.py
+@@ -266,34 +266,34 @@ class ModelTest(TestCase):
+         # ... but there will often be more efficient ways if that is all you need:
+         self.assertTrue(Article.objects.filter(id=a8.id).exists())
+ 
+-        # dates() returns a list of available dates of the given scope for
++        # datetimes() returns a list of available dates of the given scope for
+         # the given field.
+         self.assertQuerysetEqual(
+-            Article.objects.dates('pub_date', 'year'),
++            Article.objects.datetimes('pub_date', 'year'),
+             ["datetime.datetime(2005, 1, 1, 0, 0)"])
+         self.assertQuerysetEqual(
+-            Article.objects.dates('pub_date', 'month'),
++            Article.objects.datetimes('pub_date', 'month'),
+             ["datetime.datetime(2005, 7, 1, 0, 0)"])
+         self.assertQuerysetEqual(
+-            Article.objects.dates('pub_date', 'day'),
++            Article.objects.datetimes('pub_date', 'day'),
+             ["datetime.datetime(2005, 7, 28, 0, 0)",
+              "datetime.datetime(2005, 7, 29, 0, 0)",
+              "datetime.datetime(2005, 7, 30, 0, 0)",
+              "datetime.datetime(2005, 7, 31, 0, 0)"])
+         self.assertQuerysetEqual(
+-            Article.objects.dates('pub_date', 'day', order='ASC'),
++            Article.objects.datetimes('pub_date', 'day', order='ASC'),
+             ["datetime.datetime(2005, 7, 28, 0, 0)",
+              "datetime.datetime(2005, 7, 29, 0, 0)",
+              "datetime.datetime(2005, 7, 30, 0, 0)",
+              "datetime.datetime(2005, 7, 31, 0, 0)"])
+         self.assertQuerysetEqual(
+-            Article.objects.dates('pub_date', 'day', order='DESC'),
++            Article.objects.datetimes('pub_date', 'day', order='DESC'),
+             ["datetime.datetime(2005, 7, 31, 0, 0)",
+              "datetime.datetime(2005, 7, 30, 0, 0)",
+              "datetime.datetime(2005, 7, 29, 0, 0)",
+              "datetime.datetime(2005, 7, 28, 0, 0)"])
+ 
+-        # dates() requires valid arguments.
++        # datetimes() requires valid arguments.
+         self.assertRaises(
+             TypeError,
+             Article.objects.dates,
+@@ -324,10 +324,10 @@ class ModelTest(TestCase):
+             order="bad order",
+         )
+ 
+-        # Use iterator() with dates() to return a generator that lazily
++        # Use iterator() with datetimes() to return a generator that lazily
+         # requests each result one at a time, to save memory.
+         dates = []
+-        for article in Article.objects.dates('pub_date', 'day', order='DESC').iterator():
++        for article in Article.objects.datetimes('pub_date', 'day', order='DESC').iterator():
+             dates.append(article)
+         self.assertEqual(dates, [
+             datetime(2005, 7, 31, 0, 0),
+diff --git a/tests/modeltests/many_to_one/tests.py b/tests/modeltests/many_to_one/tests.py
+index 44ae689..a4f87a3 100644
+--- a/tests/modeltests/many_to_one/tests.py
++++ b/tests/modeltests/many_to_one/tests.py
+@@ -1,7 +1,7 @@
+ from __future__ import absolute_import
+ 
+ from copy import deepcopy
+-from datetime import datetime
++import datetime
+ 
+ from django.core.exceptions import MultipleObjectsReturned, FieldError
+ from django.test import TestCase
+@@ -20,7 +20,7 @@ class ManyToOneTests(TestCase):
+         self.r2.save()
+         # Create an Article.
+         self.a = Article(id=None, headline="This is a test",
+-                         pub_date=datetime(2005, 7, 27), reporter=self.r)
++                         pub_date=datetime.date(2005, 7, 27), reporter=self.r)
+         self.a.save()
+ 
+     def test_get(self):
+@@ -36,25 +36,25 @@ class ManyToOneTests(TestCase):
+         # You can also instantiate an Article by passing the Reporter's ID
+         # instead of a Reporter object.
+         a3 = Article(id=None, headline="Third article",
+-                     pub_date=datetime(2005, 7, 27), reporter_id=self.r.id)
++                     pub_date=datetime.date(2005, 7, 27), reporter_id=self.r.id)
+         a3.save()
+         self.assertEqual(a3.reporter.id, self.r.id)
+ 
+         # Similarly, the reporter ID can be a string.
+         a4 = Article(id=None, headline="Fourth article",
+-                     pub_date=datetime(2005, 7, 27), reporter_id=str(self.r.id))
++                     pub_date=datetime.date(2005, 7, 27), reporter_id=str(self.r.id))
+         a4.save()
+         self.assertEqual(repr(a4.reporter), "<Reporter: John Smith>")
+ 
+     def test_add(self):
+         # Create an Article via the Reporter object.
+         new_article = self.r.article_set.create(headline="John's second story",
+-                                                pub_date=datetime(2005, 7, 29))
++                                                pub_date=datetime.date(2005, 7, 29))
+         self.assertEqual(repr(new_article), "<Article: John's second story>")
+         self.assertEqual(new_article.reporter.id, self.r.id)
+ 
+         # Create a new article, and add it to the article set.
+-        new_article2 = Article(headline="Paul's story", pub_date=datetime(2006, 1, 17))
++        new_article2 = Article(headline="Paul's story", pub_date=datetime.date(2006, 1, 17))
+         self.r.article_set.add(new_article2)
+         self.assertEqual(new_article2.reporter.id, self.r.id)
+         self.assertQuerysetEqual(self.r.article_set.all(),
+@@ -80,9 +80,9 @@ class ManyToOneTests(TestCase):
+ 
+     def test_assign(self):
+         new_article = self.r.article_set.create(headline="John's second story",
+-                                                pub_date=datetime(2005, 7, 29))
++                                                pub_date=datetime.date(2005, 7, 29))
+         new_article2 = self.r2.article_set.create(headline="Paul's story",
+-                                                  pub_date=datetime(2006, 1, 17))
++                                                  pub_date=datetime.date(2006, 1, 17))
+         # Assign the article to the reporter directly using the descriptor.
+         new_article2.reporter = self.r
+         new_article2.save()
+@@ -118,9 +118,9 @@ class ManyToOneTests(TestCase):
+ 
+     def test_selects(self):
+         new_article = self.r.article_set.create(headline="John's second story",
+-                                                pub_date=datetime(2005, 7, 29))
++                                                pub_date=datetime.date(2005, 7, 29))
+         new_article2 = self.r2.article_set.create(headline="Paul's story",
+-                                                  pub_date=datetime(2006, 1, 17))
++                                                  pub_date=datetime.date(2006, 1, 17))
+         # Reporter objects have access to their related Article objects.
+         self.assertQuerysetEqual(self.r.article_set.all(), [
+             "<Article: John's second story>",
+@@ -237,9 +237,9 @@ class ManyToOneTests(TestCase):
+ 
+     def test_reverse_selects(self):
+         a3 = Article.objects.create(id=None, headline="Third article",
+-                                    pub_date=datetime(2005, 7, 27), reporter_id=self.r.id)
++                                    pub_date=datetime.date(2005, 7, 27), reporter_id=self.r.id)
+         a4 = Article.objects.create(id=None, headline="Fourth article",
+-                                    pub_date=datetime(2005, 7, 27), reporter_id=str(self.r.id))
++                                    pub_date=datetime.date(2005, 7, 27), reporter_id=str(self.r.id))
+         # Reporters can be queried
+         self.assertQuerysetEqual(Reporter.objects.filter(id__exact=self.r.id),
+                                  ["<Reporter: John Smith>"])
+@@ -316,33 +316,33 @@ class ManyToOneTests(TestCase):
+         # objects (Reporters).
+         r1 = Reporter.objects.create(first_name='Mike', last_name='Royko', email='royko@suntimes.com')
+         r2 = Reporter.objects.create(first_name='John', last_name='Kass', email='jkass@tribune.com')
+-        a1 = Article.objects.create(headline='First', pub_date=datetime(1980, 4, 23), reporter=r1)
+-        a2 = Article.objects.create(headline='Second', pub_date=datetime(1980, 4, 23), reporter=r2)
++        Article.objects.create(headline='First', pub_date=datetime.date(1980, 4, 23), reporter=r1)
++        Article.objects.create(headline='Second', pub_date=datetime.date(1980, 4, 23), reporter=r2)
+         self.assertEqual(list(Article.objects.select_related().dates('pub_date', 'day')),
+             [
+-                datetime(1980, 4, 23, 0, 0),
+-                datetime(2005, 7, 27, 0, 0),
++                datetime.date(1980, 4, 23),
++                datetime.date(2005, 7, 27),
+             ])
+         self.assertEqual(list(Article.objects.select_related().dates('pub_date', 'month')),
+             [
+-                datetime(1980, 4, 1, 0, 0),
+-                datetime(2005, 7, 1, 0, 0),
++                datetime.date(1980, 4, 1),
++                datetime.date(2005, 7, 1),
+             ])
+         self.assertEqual(list(Article.objects.select_related().dates('pub_date', 'year')),
+             [
+-                datetime(1980, 1, 1, 0, 0),
+-                datetime(2005, 1, 1, 0, 0),
++                datetime.date(1980, 1, 1),
++                datetime.date(2005, 1, 1),
+             ])
+ 
+     def test_delete(self):
+         new_article = self.r.article_set.create(headline="John's second story",
+-                                                pub_date=datetime(2005, 7, 29))
++                                                pub_date=datetime.date(2005, 7, 29))
+         new_article2 = self.r2.article_set.create(headline="Paul's story",
+-                                                  pub_date=datetime(2006, 1, 17))
++                                                  pub_date=datetime.date(2006, 1, 17))
+         a3 = Article.objects.create(id=None, headline="Third article",
+-                                    pub_date=datetime(2005, 7, 27), reporter_id=self.r.id)
++                                    pub_date=datetime.date(2005, 7, 27), reporter_id=self.r.id)
+         a4 = Article.objects.create(id=None, headline="Fourth article",
+-                                    pub_date=datetime(2005, 7, 27), reporter_id=str(self.r.id))
++                                    pub_date=datetime.date(2005, 7, 27), reporter_id=str(self.r.id))
+         # If you delete a reporter, his articles will be deleted.
+         self.assertQuerysetEqual(Article.objects.all(),
+             [
+@@ -383,7 +383,7 @@ class ManyToOneTests(TestCase):
+         # for a ForeignKey.
+         a2, created = Article.objects.get_or_create(id=None,
+                                                     headline="John's second test",
+-                                                    pub_date=datetime(2011, 5, 7),
++                                                    pub_date=datetime.date(2011, 5, 7),
+                                                     reporter_id=self.r.id)
+         self.assertTrue(created)
+         self.assertEqual(a2.reporter.id, self.r.id)
+@@ -398,7 +398,7 @@ class ManyToOneTests(TestCase):
+ 
+         # Create an Article by Paul for the same date.
+         a3 = Article.objects.create(id=None, headline="Paul's commentary",
+-                                    pub_date=datetime(2011, 5, 7),
++                                    pub_date=datetime.date(2011, 5, 7),
+                                     reporter_id=self.r2.id)
+         self.assertEqual(a3.reporter.id, self.r2.id)
+ 
+@@ -407,7 +407,7 @@ class ManyToOneTests(TestCase):
+                           Article.objects.get, reporter_id=self.r.id)
+         self.assertEqual(repr(a3),
+                          repr(Article.objects.get(reporter_id=self.r2.id,
+-                                             pub_date=datetime(2011, 5, 7))))
++                                             pub_date=datetime.date(2011, 5, 7))))
+ 
+     def test_manager_class_caching(self):
+         r1 = Reporter.objects.create(first_name='Mike')
+@@ -425,7 +425,7 @@ class ManyToOneTests(TestCase):
+                                            email='john.smith@example.com')
+         lazy = ugettext_lazy('test')
+         reporter.article_set.create(headline=lazy,
+-                                    pub_date=datetime(2011, 6, 10))
++                                    pub_date=datetime.date(2011, 6, 10))
+         notlazy = six.text_type(lazy)
+         article = reporter.article_set.get()
+         self.assertEqual(article.headline, notlazy)
+diff --git a/tests/modeltests/reserved_names/tests.py b/tests/modeltests/reserved_names/tests.py
+index 87f7a42..ddffe08 100644
+--- a/tests/modeltests/reserved_names/tests.py
++++ b/tests/modeltests/reserved_names/tests.py
+@@ -42,8 +42,8 @@ class ReservedNameTests(TestCase):
+         self.generate()
+         resp = Thing.objects.dates('where', 'year')
+         self.assertEqual(list(resp), [
+-            datetime.datetime(2005, 1, 1, 0, 0),
+-            datetime.datetime(2006, 1, 1, 0, 0),
++            datetime.date(2005, 1, 1),
++            datetime.date(2006, 1, 1),
+         ])
+ 
+     def test_month_filter(self):
+diff --git a/tests/modeltests/timezones/tests.py b/tests/modeltests/timezones/tests.py
+index 4ae6bbd..8786c19 100644
+--- a/tests/modeltests/timezones/tests.py
++++ b/tests/modeltests/timezones/tests.py
+@@ -189,13 +189,16 @@ class LegacyDatabaseTests(TestCase):
+         self.assertEqual(Event.objects.filter(dt__gte=dt2).count(), 1)
+         self.assertEqual(Event.objects.filter(dt__gt=dt2).count(), 0)
+ 
+-    def test_query_date_related_filters(self):
++    def test_query_datetime_lookups(self):
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0))
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0))
+         self.assertEqual(Event.objects.filter(dt__year=2011).count(), 2)
+         self.assertEqual(Event.objects.filter(dt__month=1).count(), 2)
+         self.assertEqual(Event.objects.filter(dt__day=1).count(), 2)
+         self.assertEqual(Event.objects.filter(dt__week_day=7).count(), 2)
++        self.assertEqual(Event.objects.filter(dt__hour=1).count(), 1)
++        self.assertEqual(Event.objects.filter(dt__minute=30).count(), 2)
++        self.assertEqual(Event.objects.filter(dt__second=0).count(), 2)
+ 
+     def test_query_aggregation(self):
+         # Only min and max make sense for datetimes.
+@@ -230,15 +233,30 @@ class LegacyDatabaseTests(TestCase):
+                 [afternoon_min_dt],
+                 transform=lambda d: d.dt)
+ 
+-    def test_query_dates(self):
++    def test_query_datetimes(self):
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0))
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0))
+-        self.assertQuerysetEqual(Event.objects.dates('dt', 'year'),
+-                [datetime.datetime(2011, 1, 1)], transform=lambda d: d)
+-        self.assertQuerysetEqual(Event.objects.dates('dt', 'month'),
+-                [datetime.datetime(2011, 1, 1)], transform=lambda d: d)
+-        self.assertQuerysetEqual(Event.objects.dates('dt', 'day'),
+-                [datetime.datetime(2011, 1, 1)], transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'year'),
++                [datetime.datetime(2011, 1, 1, 0, 0, 0)],
++                transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'month'),
++                [datetime.datetime(2011, 1, 1, 0, 0, 0)],
++                transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'day'),
++                [datetime.datetime(2011, 1, 1, 0, 0, 0)],
++                transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'hour'),
++                [datetime.datetime(2011, 1, 1, 1, 0, 0),
++                 datetime.datetime(2011, 1, 1, 4, 0, 0)],
++                transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'minute'),
++                [datetime.datetime(2011, 1, 1, 1, 30, 0),
++                 datetime.datetime(2011, 1, 1, 4, 30, 0)],
++                transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'second'),
++                [datetime.datetime(2011, 1, 1, 1, 30, 0),
++                 datetime.datetime(2011, 1, 1, 4, 30, 0)],
++                transform=lambda d: d)
+ 
+     def test_raw_sql(self):
+         # Regression test for #17755
+@@ -398,17 +416,32 @@ class NewDatabaseTests(TestCase):
+                 msg = str(warning.message)
+                 self.assertTrue(msg.startswith("DateTimeField received a naive datetime"))
+ 
+-    def test_query_date_related_filters(self):
+-        # These two dates fall in the same day in EAT, but in different days,
+-        # years and months in UTC, and aggregation is performed in UTC when
+-        # time zone support is enabled. This test could be changed if the
+-        # implementation is changed to perform the aggregation is local time.
++    @skipUnlessDBFeature('has_zoneinfo_database')
++    def test_query_datetime_lookups(self):
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
+-        self.assertEqual(Event.objects.filter(dt__year=2011).count(), 1)
+-        self.assertEqual(Event.objects.filter(dt__month=1).count(), 1)
+-        self.assertEqual(Event.objects.filter(dt__day=1).count(), 1)
+-        self.assertEqual(Event.objects.filter(dt__week_day=7).count(), 1)
++        self.assertEqual(Event.objects.filter(dt__year=2011).count(), 2)
++        self.assertEqual(Event.objects.filter(dt__month=1).count(), 2)
++        self.assertEqual(Event.objects.filter(dt__day=1).count(), 2)
++        self.assertEqual(Event.objects.filter(dt__week_day=7).count(), 2)
++        self.assertEqual(Event.objects.filter(dt__hour=1).count(), 1)
++        self.assertEqual(Event.objects.filter(dt__minute=30).count(), 2)
++        self.assertEqual(Event.objects.filter(dt__second=0).count(), 2)
++
++    @skipUnlessDBFeature('has_zoneinfo_database')
++    def test_query_datetime_lookups_in_other_timezone(self):
++        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
++        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
++        with timezone.override(UTC):
++            # These two dates fall in the same day in EAT, but in different days,
++            # years and months in UTC.
++            self.assertEqual(Event.objects.filter(dt__year=2011).count(), 1)
++            self.assertEqual(Event.objects.filter(dt__month=1).count(), 1)
++            self.assertEqual(Event.objects.filter(dt__day=1).count(), 1)
++            self.assertEqual(Event.objects.filter(dt__week_day=7).count(), 1)
++            self.assertEqual(Event.objects.filter(dt__hour=22).count(), 1)
++            self.assertEqual(Event.objects.filter(dt__minute=30).count(), 2)
++            self.assertEqual(Event.objects.filter(dt__second=0).count(), 2)
+ 
+     def test_query_aggregation(self):
+         # Only min and max make sense for datetimes.
+@@ -443,22 +476,61 @@ class NewDatabaseTests(TestCase):
+                 [afternoon_min_dt],
+                 transform=lambda d: d.dt)
+ 
+-    def test_query_dates(self):
+-        # Same comment as in test_query_date_related_filters.
++    @skipUnlessDBFeature('has_zoneinfo_database')
++    def test_query_datetimes(self):
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
+         Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
+-        self.assertQuerysetEqual(Event.objects.dates('dt', 'year'),
+-                [datetime.datetime(2010, 1, 1, tzinfo=UTC),
+-                 datetime.datetime(2011, 1, 1, tzinfo=UTC)],
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'year'),
++                [datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=EAT)],
++                transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'month'),
++                [datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=EAT)],
++                transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'day'),
++                [datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=EAT)],
+                 transform=lambda d: d)
+-        self.assertQuerysetEqual(Event.objects.dates('dt', 'month'),
+-                [datetime.datetime(2010, 12, 1, tzinfo=UTC),
+-                 datetime.datetime(2011, 1, 1, tzinfo=UTC)],
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'hour'),
++                [datetime.datetime(2011, 1, 1, 1, 0, 0, tzinfo=EAT),
++                 datetime.datetime(2011, 1, 1, 4, 0, 0, tzinfo=EAT)],
+                 transform=lambda d: d)
+-        self.assertQuerysetEqual(Event.objects.dates('dt', 'day'),
+-                [datetime.datetime(2010, 12, 31, tzinfo=UTC),
+-                 datetime.datetime(2011, 1, 1, tzinfo=UTC)],
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'minute'),
++                [datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT),
++                 datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT)],
+                 transform=lambda d: d)
++        self.assertQuerysetEqual(Event.objects.datetimes('dt', 'second'),
++                [datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT),
++                 datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT)],
++                transform=lambda d: d)
++
++    @skipUnlessDBFeature('has_zoneinfo_database')
++    def test_query_datetimes_in_other_timezone(self):
++        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=EAT))
++        Event.objects.create(dt=datetime.datetime(2011, 1, 1, 4, 30, 0, tzinfo=EAT))
++        with timezone.override(UTC):
++            self.assertQuerysetEqual(Event.objects.datetimes('dt', 'year'),
++                    [datetime.datetime(2010, 1, 1, 0, 0, 0, tzinfo=UTC),
++                     datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=UTC)],
++                    transform=lambda d: d)
++            self.assertQuerysetEqual(Event.objects.datetimes('dt', 'month'),
++                    [datetime.datetime(2010, 12, 1, 0, 0, 0, tzinfo=UTC),
++                     datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=UTC)],
++                    transform=lambda d: d)
++            self.assertQuerysetEqual(Event.objects.datetimes('dt', 'day'),
++                    [datetime.datetime(2010, 12, 31, 0, 0, 0, tzinfo=UTC),
++                     datetime.datetime(2011, 1, 1, 0, 0, 0, tzinfo=UTC)],
++                    transform=lambda d: d)
++            self.assertQuerysetEqual(Event.objects.datetimes('dt', 'hour'),
++                    [datetime.datetime(2010, 12, 31, 22, 0, 0, tzinfo=UTC),
++                     datetime.datetime(2011, 1, 1, 1, 0, 0, tzinfo=UTC)],
++                    transform=lambda d: d)
++            self.assertQuerysetEqual(Event.objects.datetimes('dt', 'minute'),
++                    [datetime.datetime(2010, 12, 31, 22, 30, 0, tzinfo=UTC),
++                     datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=UTC)],
++                    transform=lambda d: d)
++            self.assertQuerysetEqual(Event.objects.datetimes('dt', 'second'),
++                    [datetime.datetime(2010, 12, 31, 22, 30, 0, tzinfo=UTC),
++                     datetime.datetime(2011, 1, 1, 1, 30, 0, tzinfo=UTC)],
++                    transform=lambda d: d)
+ 
+     def test_raw_sql(self):
+         # Regression test for #17755
+diff --git a/tests/regressiontests/aggregation_regress/tests.py b/tests/regressiontests/aggregation_regress/tests.py
+index 596ebbf..0765675 100644
+--- a/tests/regressiontests/aggregation_regress/tests.py
++++ b/tests/regressiontests/aggregation_regress/tests.py
+@@ -546,8 +546,8 @@ class AggregationTests(TestCase):
+         qs = Book.objects.annotate(num_authors=Count('authors')).filter(num_authors=2).dates('pubdate', 'day')
+         self.assertQuerysetEqual(
+             qs, [
+-                datetime.datetime(1995, 1, 15, 0, 0),
+-                datetime.datetime(2007, 12, 6, 0, 0)
++                datetime.date(1995, 1, 15),
++                datetime.date(2007, 12, 6),
+             ],
+             lambda b: b
+         )
+diff --git a/tests/regressiontests/backends/tests.py b/tests/regressiontests/backends/tests.py
+index 313fdc8..fbe5026 100644
+--- a/tests/regressiontests/backends/tests.py
++++ b/tests/regressiontests/backends/tests.py
+@@ -144,11 +144,11 @@ class DateQuotingTest(TestCase):
+         updated = datetime.datetime(2010, 2, 20)
+         models.SchoolClass.objects.create(year=2009, last_updated=updated)
+         years = models.SchoolClass.objects.dates('last_updated', 'year')
+-        self.assertEqual(list(years), [datetime.datetime(2010, 1, 1, 0, 0)])
++        self.assertEqual(list(years), [datetime.date(2010, 1, 1)])
+ 
+-    def test_django_extract(self):
++    def test_django_date_extract(self):
+         """
+-        Test the custom ``django_extract method``, in particular against fields
++        Test the custom ``django_date_extract method``, in particular against fields
+         which clash with strings passed to it (e.g. 'day') - see #12818__.
+ 
+         __: http://code.djangoproject.com/ticket/12818
+diff --git a/tests/regressiontests/dates/models.py b/tests/regressiontests/dates/models.py
+index e4bffb7..2335075 100644
+--- a/tests/regressiontests/dates/models.py
++++ b/tests/regressiontests/dates/models.py
+@@ -1,3 +1,5 @@
++from __future__ import unicode_literals
++
+ from django.db import models
+ from django.utils.encoding import python_2_unicode_compatible
+ 
+diff --git a/tests/regressiontests/dates/tests.py b/tests/regressiontests/dates/tests.py
+index de28cac..6c02d59 100644
+--- a/tests/regressiontests/dates/tests.py
++++ b/tests/regressiontests/dates/tests.py
+@@ -1,6 +1,6 @@
+ from __future__ import absolute_import
+ 
+-from datetime import datetime
++import datetime
+ 
+ from django.test import TestCase
+ 
+@@ -11,32 +11,32 @@ class DatesTests(TestCase):
+     def test_related_model_traverse(self):
+         a1 = Article.objects.create(
+             title="First one",
+-            pub_date=datetime(2005, 7, 28),
++            pub_date=datetime.date(2005, 7, 28),
+         )
+         a2 = Article.objects.create(
+             title="Another one",
+-            pub_date=datetime(2010, 7, 28),
++            pub_date=datetime.date(2010, 7, 28),
+         )
+         a3 = Article.objects.create(
+             title="Third one, in the first day",
+-            pub_date=datetime(2005, 7, 28),
++            pub_date=datetime.date(2005, 7, 28),
+         )
+ 
+         a1.comments.create(
+             text="Im the HULK!",
+-            pub_date=datetime(2005, 7, 28),
++            pub_date=datetime.date(2005, 7, 28),
+         )
+         a1.comments.create(
+             text="HULK SMASH!",
+-            pub_date=datetime(2005, 7, 29),
++            pub_date=datetime.date(2005, 7, 29),
+         )
+         a2.comments.create(
+             text="LMAO",
+-            pub_date=datetime(2010, 7, 28),
++            pub_date=datetime.date(2010, 7, 28),
+         )
+         a3.comments.create(
+             text="+1",
+-            pub_date=datetime(2005, 8, 29),
++            pub_date=datetime.date(2005, 8, 29),
+         )
+ 
+         c = Category.objects.create(name="serious-news")
+@@ -44,31 +44,31 @@ class DatesTests(TestCase):
+ 
+         self.assertQuerysetEqual(
+             Comment.objects.dates("article__pub_date", "year"), [
+-                datetime(2005, 1, 1),
+-                datetime(2010, 1, 1),
++                datetime.date(2005, 1, 1),
++                datetime.date(2010, 1, 1),
+             ],
+             lambda d: d,
+         )
+         self.assertQuerysetEqual(
+             Comment.objects.dates("article__pub_date", "month"), [
+-                datetime(2005, 7, 1),
+-                datetime(2010, 7, 1),
++                datetime.date(2005, 7, 1),
++                datetime.date(2010, 7, 1),
+             ],
+             lambda d: d
+         )
+         self.assertQuerysetEqual(
+             Comment.objects.dates("article__pub_date", "day"), [
+-                datetime(2005, 7, 28),
+-                datetime(2010, 7, 28),
++                datetime.date(2005, 7, 28),
++                datetime.date(2010, 7, 28),
+             ],
+             lambda d: d
+         )
+         self.assertQuerysetEqual(
+             Article.objects.dates("comments__pub_date", "day"), [
+-                datetime(2005, 7, 28),
+-                datetime(2005, 7, 29),
+-                datetime(2005, 8, 29),
+-                datetime(2010, 7, 28),
++                datetime.date(2005, 7, 28),
++                datetime.date(2005, 7, 29),
++                datetime.date(2005, 8, 29),
++                datetime.date(2010, 7, 28),
+             ],
+             lambda d: d
+         )
+@@ -77,7 +77,7 @@ class DatesTests(TestCase):
+         )
+         self.assertQuerysetEqual(
+             Category.objects.dates("articles__pub_date", "day"), [
+-                datetime(2005, 7, 28),
++                datetime.date(2005, 7, 28),
+             ],
+             lambda d: d,
+         )
+diff --git a/tests/regressiontests/datetimes/__init__.py b/tests/regressiontests/datetimes/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/regressiontests/datetimes/models.py b/tests/regressiontests/datetimes/models.py
+new file mode 100644
+index 0000000..f21376a
+--- /dev/null
++++ b/tests/regressiontests/datetimes/models.py
+@@ -0,0 +1,28 @@
++from __future__ import unicode_literals
++
++from django.db import models
++from django.utils.encoding import python_2_unicode_compatible
++
++
++@python_2_unicode_compatible
++class Article(models.Model):
++    title = models.CharField(max_length=100)
++    pub_date = models.DateTimeField()
++
++    categories = models.ManyToManyField("Category", related_name="articles")
++
++    def __str__(self):
++        return self.title
++
++@python_2_unicode_compatible
++class Comment(models.Model):
++    article = models.ForeignKey(Article, related_name="comments")
++    text = models.TextField()
++    pub_date = models.DateTimeField()
++    approval_date = models.DateTimeField(null=True)
++
++    def __str__(self):
++        return 'Comment to %s (%s)' % (self.article.title, self.pub_date)
++
++class Category(models.Model):
++    name = models.CharField(max_length=255)
+diff --git a/tests/regressiontests/datetimes/tests.py b/tests/regressiontests/datetimes/tests.py
+new file mode 100644
+index 0000000..58cb060
+--- /dev/null
++++ b/tests/regressiontests/datetimes/tests.py
+@@ -0,0 +1,83 @@
++from __future__ import absolute_import
++
++import datetime
++
++from django.test import TestCase
++
++from .models import Article, Comment, Category
++
++
++class DateTimesTests(TestCase):
++    def test_related_model_traverse(self):
++        a1 = Article.objects.create(
++            title="First one",
++            pub_date=datetime.datetime(2005, 7, 28, 9, 0, 0),
++        )
++        a2 = Article.objects.create(
++            title="Another one",
++            pub_date=datetime.datetime(2010, 7, 28, 10, 0, 0),
++        )
++        a3 = Article.objects.create(
++            title="Third one, in the first day",
++            pub_date=datetime.datetime(2005, 7, 28, 17, 0, 0),
++        )
++
++        a1.comments.create(
++            text="Im the HULK!",
++            pub_date=datetime.datetime(2005, 7, 28, 9, 30, 0),
++        )
++        a1.comments.create(
++            text="HULK SMASH!",
++            pub_date=datetime.datetime(2005, 7, 29, 1, 30, 0),
++        )
++        a2.comments.create(
++            text="LMAO",
++            pub_date=datetime.datetime(2010, 7, 28, 10, 10, 10),
++        )
++        a3.comments.create(
++            text="+1",
++            pub_date=datetime.datetime(2005, 8, 29, 10, 10, 10),
++        )
++
++        c = Category.objects.create(name="serious-news")
++        c.articles.add(a1, a3)
++
++        self.assertQuerysetEqual(
++            Comment.objects.datetimes("article__pub_date", "year"), [
++                datetime.datetime(2005, 1, 1),
++                datetime.datetime(2010, 1, 1),
++            ],
++            lambda d: d,
++        )
++        self.assertQuerysetEqual(
++            Comment.objects.datetimes("article__pub_date", "month"), [
++                datetime.datetime(2005, 7, 1),
++                datetime.datetime(2010, 7, 1),
++            ],
++            lambda d: d
++        )
++        self.assertQuerysetEqual(
++            Comment.objects.datetimes("article__pub_date", "day"), [
++                datetime.datetime(2005, 7, 28),
++                datetime.datetime(2010, 7, 28),
++            ],
++            lambda d: d
++        )
++        self.assertQuerysetEqual(
++            Article.objects.datetimes("comments__pub_date", "day"), [
++                datetime.datetime(2005, 7, 28),
++                datetime.datetime(2005, 7, 29),
++                datetime.datetime(2005, 8, 29),
++                datetime.datetime(2010, 7, 28),
++            ],
++            lambda d: d
++        )
++        self.assertQuerysetEqual(
++            Article.objects.datetimes("comments__approval_date", "day"), []
++        )
++        self.assertQuerysetEqual(
++            Category.objects.datetimes("articles__pub_date", "day"), [
++                datetime.datetime(2005, 7, 28),
++            ],
++            lambda d: d,
++        )
+diff --git a/tests/regressiontests/extra_regress/tests.py b/tests/regressiontests/extra_regress/tests.py
+index 1bc6789..194b250 100644
+--- a/tests/regressiontests/extra_regress/tests.py
++++ b/tests/regressiontests/extra_regress/tests.py
+@@ -166,8 +166,9 @@ class ExtraRegressTests(TestCase):
+         )
+ 
+         self.assertQuerysetEqual(
+-            RevisionableModel.objects.extra(select={"the_answer": 'id'}).dates('when', 'month'),
+-            ['datetime.datetime(2008, 9, 1, 0, 0)']
++            RevisionableModel.objects.extra(select={"the_answer": 'id'}).datetimes('when', 'month'),
++            [datetime.datetime(2008, 9, 1, 0, 0)],
++            transform=lambda d: d,
+         )
+ 
+     def test_values_with_extra(self):
+diff --git a/tests/regressiontests/generic_views/dates.py b/tests/regressiontests/generic_views/dates.py
+index 0c565da..844b10b 100644
+--- a/tests/regressiontests/generic_views/dates.py
++++ b/tests/regressiontests/generic_views/dates.py
+@@ -4,7 +4,7 @@ import time
+ import datetime
+ 
+ from django.core.exceptions import ImproperlyConfigured
+-from django.test import TestCase
++from django.test import TestCase, skipUnlessDBFeature
+ from django.test.utils import override_settings
+ from django.utils import timezone
+ from django.utils.unittest import skipUnless
+@@ -119,6 +119,7 @@ class ArchiveIndexViewTests(TestCase):
+         self.assertEqual(res.status_code, 200)
+ 
+     @requires_tz_support
++    @skipUnlessDBFeature('has_zoneinfo_database')
+     @override_settings(USE_TZ=True, TIME_ZONE='Africa/Nairobi')
+     def test_aware_datetime_archive_view(self):
+         BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0, tzinfo=timezone.utc))
+@@ -140,7 +141,7 @@ class YearArchiveViewTests(TestCase):
+     def test_year_view(self):
+         res = self.client.get('/dates/books/2008/')
+         self.assertEqual(res.status_code, 200)
+-        self.assertEqual(list(res.context['date_list']), [datetime.datetime(2008, 10, 1)])
++        self.assertEqual(list(res.context['date_list']), [datetime.date(2008, 10, 1)])
+         self.assertEqual(res.context['year'], datetime.date(2008, 1, 1))
+         self.assertTemplateUsed(res, 'generic_views/book_archive_year.html')
+ 
+@@ -151,7 +152,7 @@ class YearArchiveViewTests(TestCase):
+     def test_year_view_make_object_list(self):
+         res = self.client.get('/dates/books/2006/make_object_list/')
+         self.assertEqual(res.status_code, 200)
+-        self.assertEqual(list(res.context['date_list']), [datetime.datetime(2006, 5, 1)])
++        self.assertEqual(list(res.context['date_list']), [datetime.date(2006, 5, 1)])
+         self.assertEqual(list(res.context['book_list']), list(Book.objects.filter(pubdate__year=2006)))
+         self.assertEqual(list(res.context['object_list']), list(Book.objects.filter(pubdate__year=2006)))
+         self.assertTemplateUsed(res, 'generic_views/book_archive_year.html')
+@@ -181,7 +182,7 @@ class YearArchiveViewTests(TestCase):
+ 
+         res = self.client.get('/dates/books/%s/allow_future/' % year)
+         self.assertEqual(res.status_code, 200)
+-        self.assertEqual(list(res.context['date_list']), [datetime.datetime(year, 1, 1)])
++        self.assertEqual(list(res.context['date_list']), [datetime.date(year, 1, 1)])
+ 
+     def test_year_view_paginated(self):
+         res = self.client.get('/dates/books/2006/paginated/')
+@@ -204,6 +205,7 @@ class YearArchiveViewTests(TestCase):
+         res = self.client.get('/dates/booksignings/2008/')
+         self.assertEqual(res.status_code, 200)
+ 
++    @skipUnlessDBFeature('has_zoneinfo_database')
+     @override_settings(USE_TZ=True, TIME_ZONE='Africa/Nairobi')
+     def test_aware_datetime_year_view(self):
+         BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0, tzinfo=timezone.utc))
+@@ -225,7 +227,7 @@ class MonthArchiveViewTests(TestCase):
+         res = self.client.get('/dates/books/2008/oct/')
+         self.assertEqual(res.status_code, 200)
+         self.assertTemplateUsed(res, 'generic_views/book_archive_month.html')
+-        self.assertEqual(list(res.context['date_list']), [datetime.datetime(2008, 10, 1)])
++        self.assertEqual(list(res.context['date_list']), [datetime.date(2008, 10, 1)])
+         self.assertEqual(list(res.context['book_list']),
+                          list(Book.objects.filter(pubdate=datetime.date(2008, 10, 1))))
+         self.assertEqual(res.context['month'], datetime.date(2008, 10, 1))
+@@ -268,7 +270,7 @@ class MonthArchiveViewTests(TestCase):
+         # allow_future = True, valid future month
+         res = self.client.get('/dates/books/%s/allow_future/' % urlbit)
+         self.assertEqual(res.status_code, 200)
+-        self.assertEqual(res.context['date_list'][0].date(), b.pubdate)
++        self.assertEqual(res.context['date_list'][0], b.pubdate)
+         self.assertEqual(list(res.context['book_list']), [b])
+         self.assertEqual(res.context['month'], future)
+ 
+@@ -328,6 +330,7 @@ class MonthArchiveViewTests(TestCase):
+         res = self.client.get('/dates/booksignings/2008/apr/')
+         self.assertEqual(res.status_code, 200)
+ 
++    @skipUnlessDBFeature('has_zoneinfo_database')
+     @override_settings(USE_TZ=True, TIME_ZONE='Africa/Nairobi')
+     def test_aware_datetime_month_view(self):
+         BookSigning.objects.create(event_date=datetime.datetime(2008, 2, 1, 12, 0, tzinfo=timezone.utc))
+diff --git a/tests/regressiontests/model_inheritance_regress/tests.py b/tests/regressiontests/model_inheritance_regress/tests.py
+index 6855d70..8f741bb 100644
+--- a/tests/regressiontests/model_inheritance_regress/tests.py
++++ b/tests/regressiontests/model_inheritance_regress/tests.py
+@@ -134,8 +134,8 @@ class ModelInheritanceTest(TestCase):
+         obj = Child.objects.create(
+             name='child',
+             created=datetime.datetime(2008, 6, 26, 17, 0, 0))
+-        dates = list(Child.objects.dates('created', 'month'))
+-        self.assertEqual(dates, [datetime.datetime(2008, 6, 1, 0, 0)])
++        datetimes = list(Child.objects.datetimes('created', 'month'))
++        self.assertEqual(datetimes, [datetime.datetime(2008, 6, 1, 0, 0)])
+ 
+     def test_issue_7276(self):
+         # Regression test for #7276: calling delete() on a model with
+diff --git a/tests/regressiontests/null_queries/models.py b/tests/regressiontests/null_queries/models.py
+index 25560fb..9070dd4 100644
+--- a/tests/regressiontests/null_queries/models.py
++++ b/tests/regressiontests/null_queries/models.py
+@@ -28,4 +28,5 @@ class OuterB(models.Model):
+ 
+ class Inner(models.Model):
+     first = models.ForeignKey(OuterA)
+-    second = models.ForeignKey(OuterB, null=True)
++    # second would clash with the __second lookup.
++    third = models.ForeignKey(OuterB, null=True)
+diff --git a/tests/regressiontests/null_queries/tests.py b/tests/regressiontests/null_queries/tests.py
+index 47c99fb..93e72d5 100644
+--- a/tests/regressiontests/null_queries/tests.py
++++ b/tests/regressiontests/null_queries/tests.py
+@@ -55,17 +55,17 @@ class NullQueriesTests(TestCase):
+         """
+         obj = OuterA.objects.create()
+         self.assertQuerysetEqual(
+-            OuterA.objects.filter(inner__second=None),
++            OuterA.objects.filter(inner__third=None),
+             ['<OuterA: OuterA object>']
+         )
+         self.assertQuerysetEqual(
+-            OuterA.objects.filter(inner__second__data=None),
++            OuterA.objects.filter(inner__third__data=None),
+             ['<OuterA: OuterA object>']
+         )
+ 
+         inner_obj = Inner.objects.create(first=obj)
+         self.assertQuerysetEqual(
+-            Inner.objects.filter(first__inner__second=None),
++            Inner.objects.filter(first__inner__third=None),
+             ['<Inner: Inner object>']
+         )
+ 
+diff --git a/tests/regressiontests/queries/tests.py b/tests/regressiontests/queries/tests.py
+index 9d22397..ea54d18 100644
+--- a/tests/regressiontests/queries/tests.py
++++ b/tests/regressiontests/queries/tests.py
+@@ -550,37 +550,37 @@ class Queries1Tests(BaseQuerysetTest):
+     def test_tickets_6180_6203(self):
+         # Dates with limits and/or counts
+         self.assertEqual(Item.objects.count(), 4)
+-        self.assertEqual(Item.objects.dates('created', 'month').count(), 1)
+-        self.assertEqual(Item.objects.dates('created', 'day').count(), 2)
+-        self.assertEqual(len(Item.objects.dates('created', 'day')), 2)
+-        self.assertEqual(Item.objects.dates('created', 'day')[0], datetime.datetime(2007, 12, 19, 0, 0))
++        self.assertEqual(Item.objects.datetimes('created', 'month').count(), 1)
++        self.assertEqual(Item.objects.datetimes('created', 'day').count(), 2)
++        self.assertEqual(len(Item.objects.datetimes('created', 'day')), 2)
++        self.assertEqual(Item.objects.datetimes('created', 'day')[0], datetime.datetime(2007, 12, 19, 0, 0))
+ 
+     def test_tickets_7087_12242(self):
+         # Dates with extra select columns
+         self.assertQuerysetEqual(
+-            Item.objects.dates('created', 'day').extra(select={'a': 1}),
++            Item.objects.datetimes('created', 'day').extra(select={'a': 1}),
+             ['datetime.datetime(2007, 12, 19, 0, 0)', 'datetime.datetime(2007, 12, 20, 0, 0)']
+         )
+         self.assertQuerysetEqual(
+-            Item.objects.extra(select={'a': 1}).dates('created', 'day'),
++            Item.objects.extra(select={'a': 1}).datetimes('created', 'day'),
+             ['datetime.datetime(2007, 12, 19, 0, 0)', 'datetime.datetime(2007, 12, 20, 0, 0)']
+         )
+ 
+         name="one"
+         self.assertQuerysetEqual(
+-            Item.objects.dates('created', 'day').extra(where=['name=%s'], params=[name]),
++            Item.objects.datetimes('created', 'day').extra(where=['name=%s'], params=[name]),
+             ['datetime.datetime(2007, 12, 19, 0, 0)']
+         )
+ 
+         self.assertQuerysetEqual(
+-            Item.objects.extra(where=['name=%s'], params=[name]).dates('created', 'day'),
++            Item.objects.extra(where=['name=%s'], params=[name]).datetimes('created', 'day'),
+             ['datetime.datetime(2007, 12, 19, 0, 0)']
+         )
+ 
+     def test_ticket7155(self):
+         # Nullable dates
+         self.assertQuerysetEqual(
+-            Item.objects.dates('modified', 'day'),
++            Item.objects.datetimes('modified', 'day'),
+             ['datetime.datetime(2007, 12, 19, 0, 0)']
+         )
+ 
+@@ -699,7 +699,7 @@ class Queries1Tests(BaseQuerysetTest):
+         )
+ 
+         # Pickling of DateQuerySets used to fail
+-        qs = Item.objects.dates('created', 'month')
++        qs = Item.objects.datetimes('created', 'month')
+         _ = pickle.loads(pickle.dumps(qs))
+ 
+     def test_ticket9997(self):
+@@ -1235,8 +1235,8 @@ class Queries3Tests(BaseQuerysetTest):
+         # field
+         self.assertRaisesMessage(
+             AssertionError,
+-            "'name' isn't a DateField.",
+-            Item.objects.dates, 'name', 'month'
++            "'name' isn't a DateTimeField.",
++            Item.objects.datetimes, 'name', 'month'
+         )
+ 
+ class Queries4Tests(BaseQuerysetTest):
+

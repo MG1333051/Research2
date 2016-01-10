@@ -1,0 +1,1272 @@
+commit 38f1fe3b35c212136d959538a309c33bf2d340a9
+Author: Carl Meyer <carl@oddbird.net>
+Date:   Thu Oct 13 05:56:15 2011 +0000
+
+    Fixed #15372 -- Switched to a startproject default layout that allows us to avoid sys.path hacks.
+    
+    git-svn-id: http://code.djangoproject.com/svn/django/trunk@16964 bcc190cf-cafb-0310-a4f2-bffc1f526a37
+
+diff --git a/django/conf/project_template/__init__.py b/django/conf/project_template/__init__.py
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/django/conf/project_template/manage.py b/django/conf/project_template/manage.py
+index 3e4eedc..2568a32 100755
+--- a/django/conf/project_template/manage.py
++++ b/django/conf/project_template/manage.py
+@@ -1,14 +1,9 @@
+ #!/usr/bin/env python
+-from django.core.management import execute_manager
+-import imp
+-try:
+-    imp.find_module('settings') # Assumed to be in the same directory.
+-except ImportError:
+-    import sys
+-    sys.stderr.write("Error: Can't find the file 'settings.py' in the directory containing %r. It appears you've customized things.\nYou'll have to run django-admin.py, passing it your settings module.\n" % __file__)
+-    sys.exit(1)
+-
+-import settings
++import os, sys
+ 
+ if __name__ == "__main__":
+-    execute_manager(settings)
++    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ project_name }}.settings")
++
++    from django.core.management import execute_from_command_line
++
++    execute_from_command_line(sys.argv)
+diff --git a/django/conf/project_template/project_name/__init__.py b/django/conf/project_template/project_name/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/django/conf/project_template/project_name/settings.py b/django/conf/project_template/project_name/settings.py
+new file mode 100644
+index 0000000..b92c116
+--- /dev/null
++++ b/django/conf/project_template/project_name/settings.py
+@@ -0,0 +1,148 @@
++# Django settings for {{ project_name }} project.
++
++DEBUG = True
++TEMPLATE_DEBUG = DEBUG
++
++ADMINS = (
++    # ('Your Name', 'your_email@example.com'),
++)
++
++MANAGERS = ADMINS
++
++DATABASES = {
++    'default': {
++        'ENGINE': 'django.db.backends.', # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
++        'NAME': '',                      # Or path to database file if using sqlite3.
++        'USER': '',                      # Not used with sqlite3.
++        'PASSWORD': '',                  # Not used with sqlite3.
++        'HOST': '',                      # Set to empty string for localhost. Not used with sqlite3.
++        'PORT': '',                      # Set to empty string for default. Not used with sqlite3.
++    }
++}
++
++# Local time zone for this installation. Choices can be found here:
++# http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
++# although not all choices may be available on all operating systems.
++# On Unix systems, a value of None will cause Django to use the same
++# timezone as the operating system.
++# If running in a Windows environment this must be set to the same as your
++# system time zone.
++TIME_ZONE = 'America/Chicago'
++
++# Language code for this installation. All choices can be found here:
++# http://www.i18nguy.com/unicode/language-identifiers.html
++LANGUAGE_CODE = 'en-us'
++
++SITE_ID = 1
++
++# If you set this to False, Django will make some optimizations so as not
++# to load the internationalization machinery.
++USE_I18N = True
++
++# If you set this to False, Django will not format dates, numbers and
++# calendars according to the current locale
++USE_L10N = True
++
++# Absolute filesystem path to the directory that will hold user-uploaded files.
++# Example: "/home/media/media.lawrence.com/media/"
++MEDIA_ROOT = ''
++
++# URL that handles the media served from MEDIA_ROOT. Make sure to use a
++# trailing slash.
++# Examples: "http://media.lawrence.com/media/", "http://example.com/media/"
++MEDIA_URL = ''
++
++# Absolute path to the directory static files should be collected to.
++# Don't put anything in this directory yourself; store your static files
++# in apps' "static/" subdirectories and in STATICFILES_DIRS.
++# Example: "/home/media/media.lawrence.com/static/"
++STATIC_ROOT = ''
++
++# URL prefix for static files.
++# Example: "http://media.lawrence.com/static/"
++STATIC_URL = '/static/'
++
++# Additional locations of static files
++STATICFILES_DIRS = (
++    # Put strings here, like "/home/html/static" or "C:/www/django/static".
++    # Always use forward slashes, even on Windows.
++    # Don't forget to use absolute paths, not relative paths.
++)
++
++# List of finder classes that know how to find static files in
++# various locations.
++STATICFILES_FINDERS = (
++    'django.contrib.staticfiles.finders.FileSystemFinder',
++    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
++#    'django.contrib.staticfiles.finders.DefaultStorageFinder',
++)
++
++# Make this unique, and don't share it with anybody.
++SECRET_KEY = ''
++
++# List of callables that know how to import templates from various sources.
++TEMPLATE_LOADERS = (
++    'django.template.loaders.filesystem.Loader',
++    'django.template.loaders.app_directories.Loader',
++#     'django.template.loaders.eggs.Loader',
++)
++
++MIDDLEWARE_CLASSES = (
++    'django.middleware.common.CommonMiddleware',
++    'django.contrib.sessions.middleware.SessionMiddleware',
++    'django.middleware.csrf.CsrfViewMiddleware',
++    'django.contrib.auth.middleware.AuthenticationMiddleware',
++    'django.contrib.messages.middleware.MessageMiddleware',
++    # Uncomment the next line for simple clickjacking protection:
++    # 'django.middleware.clickjacking.XFrameOptionsMiddleware',
++)
++
++ROOT_URLCONF = '{{ project_name }}.urls'
++
++TEMPLATE_DIRS = (
++    # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates".
++    # Always use forward slashes, even on Windows.
++    # Don't forget to use absolute paths, not relative paths.
++)
++
++INSTALLED_APPS = (
++    'django.contrib.auth',
++    'django.contrib.contenttypes',
++    'django.contrib.sessions',
++    'django.contrib.sites',
++    'django.contrib.messages',
++    'django.contrib.staticfiles',
++    # Uncomment the next line to enable the admin:
++    # 'django.contrib.admin',
++    # Uncomment the next line to enable admin documentation:
++    # 'django.contrib.admindocs',
++)
++
++# A sample logging configuration. The only tangible logging
++# performed by this configuration is to send an email to
++# the site admins on every HTTP 500 error when DEBUG=False.
++# See http://docs.djangoproject.com/en/dev/topics/logging for
++# more details on how to customize your logging configuration.
++LOGGING = {
++    'version': 1,
++    'disable_existing_loggers': False,
++    'filters': {
++        'require_debug_false': {
++            '()': 'django.utils.log.RequireDebugFalse'
++        }
++    },
++    'handlers': {
++        'mail_admins': {
++            'level': 'ERROR',
++            'filters': ['require_debug_false'],
++            'class': 'django.utils.log.AdminEmailHandler'
++        }
++    },
++    'loggers': {
++        'django.request': {
++            'handlers': ['mail_admins'],
++            'level': 'ERROR',
++            'propagate': True,
++        },
++    }
++}
+diff --git a/django/conf/project_template/project_name/urls.py b/django/conf/project_template/project_name/urls.py
+new file mode 100644
+index 0000000..eb471d5
+--- /dev/null
++++ b/django/conf/project_template/project_name/urls.py
+@@ -0,0 +1,17 @@
++from django.conf.urls import patterns, include, url
++
++# Uncomment the next two lines to enable the admin:
++# from django.contrib import admin
++# admin.autodiscover()
++
++urlpatterns = patterns('',
++    # Examples:
++    # url(r'^$', '{{ project_name }}.views.home', name='home'),
++    # url(r'^{{ project_name }}/', include('{{ project_name }}.foo.urls')),
++
++    # Uncomment the admin/doc line below to enable admin documentation:
++    # url(r'^admin/doc/', include('django.contrib.admindocs.urls')),
++
++    # Uncomment the next line to enable the admin:
++    # url(r'^admin/', include(admin.site.urls)),
++)
+diff --git a/django/conf/project_template/settings.py b/django/conf/project_template/settings.py
+deleted file mode 100644
+index b92c116..0000000
+--- a/django/conf/project_template/settings.py
++++ /dev/null
+@@ -1,148 +0,0 @@
+-# Django settings for {{ project_name }} project.
+-
+-DEBUG = True
+-TEMPLATE_DEBUG = DEBUG
+-
+-ADMINS = (
+-    # ('Your Name', 'your_email@example.com'),
+-)
+-
+-MANAGERS = ADMINS
+-
+-DATABASES = {
+-    'default': {
+-        'ENGINE': 'django.db.backends.', # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+-        'NAME': '',                      # Or path to database file if using sqlite3.
+-        'USER': '',                      # Not used with sqlite3.
+-        'PASSWORD': '',                  # Not used with sqlite3.
+-        'HOST': '',                      # Set to empty string for localhost. Not used with sqlite3.
+-        'PORT': '',                      # Set to empty string for default. Not used with sqlite3.
+-    }
+-}
+-
+-# Local time zone for this installation. Choices can be found here:
+-# http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
+-# although not all choices may be available on all operating systems.
+-# On Unix systems, a value of None will cause Django to use the same
+-# timezone as the operating system.
+-# If running in a Windows environment this must be set to the same as your
+-# system time zone.
+-TIME_ZONE = 'America/Chicago'
+-
+-# Language code for this installation. All choices can be found here:
+-# http://www.i18nguy.com/unicode/language-identifiers.html
+-LANGUAGE_CODE = 'en-us'
+-
+-SITE_ID = 1
+-
+-# If you set this to False, Django will make some optimizations so as not
+-# to load the internationalization machinery.
+-USE_I18N = True
+-
+-# If you set this to False, Django will not format dates, numbers and
+-# calendars according to the current locale
+-USE_L10N = True
+-
+-# Absolute filesystem path to the directory that will hold user-uploaded files.
+-# Example: "/home/media/media.lawrence.com/media/"
+-MEDIA_ROOT = ''
+-
+-# URL that handles the media served from MEDIA_ROOT. Make sure to use a
+-# trailing slash.
+-# Examples: "http://media.lawrence.com/media/", "http://example.com/media/"
+-MEDIA_URL = ''
+-
+-# Absolute path to the directory static files should be collected to.
+-# Don't put anything in this directory yourself; store your static files
+-# in apps' "static/" subdirectories and in STATICFILES_DIRS.
+-# Example: "/home/media/media.lawrence.com/static/"
+-STATIC_ROOT = ''
+-
+-# URL prefix for static files.
+-# Example: "http://media.lawrence.com/static/"
+-STATIC_URL = '/static/'
+-
+-# Additional locations of static files
+-STATICFILES_DIRS = (
+-    # Put strings here, like "/home/html/static" or "C:/www/django/static".
+-    # Always use forward slashes, even on Windows.
+-    # Don't forget to use absolute paths, not relative paths.
+-)
+-
+-# List of finder classes that know how to find static files in
+-# various locations.
+-STATICFILES_FINDERS = (
+-    'django.contrib.staticfiles.finders.FileSystemFinder',
+-    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+-#    'django.contrib.staticfiles.finders.DefaultStorageFinder',
+-)
+-
+-# Make this unique, and don't share it with anybody.
+-SECRET_KEY = ''
+-
+-# List of callables that know how to import templates from various sources.
+-TEMPLATE_LOADERS = (
+-    'django.template.loaders.filesystem.Loader',
+-    'django.template.loaders.app_directories.Loader',
+-#     'django.template.loaders.eggs.Loader',
+-)
+-
+-MIDDLEWARE_CLASSES = (
+-    'django.middleware.common.CommonMiddleware',
+-    'django.contrib.sessions.middleware.SessionMiddleware',
+-    'django.middleware.csrf.CsrfViewMiddleware',
+-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+-    'django.contrib.messages.middleware.MessageMiddleware',
+-    # Uncomment the next line for simple clickjacking protection:
+-    # 'django.middleware.clickjacking.XFrameOptionsMiddleware',
+-)
+-
+-ROOT_URLCONF = '{{ project_name }}.urls'
+-
+-TEMPLATE_DIRS = (
+-    # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates".
+-    # Always use forward slashes, even on Windows.
+-    # Don't forget to use absolute paths, not relative paths.
+-)
+-
+-INSTALLED_APPS = (
+-    'django.contrib.auth',
+-    'django.contrib.contenttypes',
+-    'django.contrib.sessions',
+-    'django.contrib.sites',
+-    'django.contrib.messages',
+-    'django.contrib.staticfiles',
+-    # Uncomment the next line to enable the admin:
+-    # 'django.contrib.admin',
+-    # Uncomment the next line to enable admin documentation:
+-    # 'django.contrib.admindocs',
+-)
+-
+-# A sample logging configuration. The only tangible logging
+-# performed by this configuration is to send an email to
+-# the site admins on every HTTP 500 error when DEBUG=False.
+-# See http://docs.djangoproject.com/en/dev/topics/logging for
+-# more details on how to customize your logging configuration.
+-LOGGING = {
+-    'version': 1,
+-    'disable_existing_loggers': False,
+-    'filters': {
+-        'require_debug_false': {
+-            '()': 'django.utils.log.RequireDebugFalse'
+-        }
+-    },
+-    'handlers': {
+-        'mail_admins': {
+-            'level': 'ERROR',
+-            'filters': ['require_debug_false'],
+-            'class': 'django.utils.log.AdminEmailHandler'
+-        }
+-    },
+-    'loggers': {
+-        'django.request': {
+-            'handlers': ['mail_admins'],
+-            'level': 'ERROR',
+-            'propagate': True,
+-        },
+-    }
+-}
+diff --git a/django/conf/project_template/urls.py b/django/conf/project_template/urls.py
+deleted file mode 100644
+index eb471d5..0000000
+--- a/django/conf/project_template/urls.py
++++ /dev/null
+@@ -1,17 +0,0 @@
+-from django.conf.urls import patterns, include, url
+-
+-# Uncomment the next two lines to enable the admin:
+-# from django.contrib import admin
+-# admin.autodiscover()
+-
+-urlpatterns = patterns('',
+-    # Examples:
+-    # url(r'^$', '{{ project_name }}.views.home', name='home'),
+-    # url(r'^{{ project_name }}/', include('{{ project_name }}.foo.urls')),
+-
+-    # Uncomment the admin/doc line below to enable admin documentation:
+-    # url(r'^admin/doc/', include('django.contrib.admindocs.urls')),
+-
+-    # Uncomment the next line to enable the admin:
+-    # url(r'^admin/', include(admin.site.urls)),
+-)
+diff --git a/django/core/management/__init__.py b/django/core/management/__init__.py
+index ea494c7..6edb0ba 100644
+--- a/django/core/management/__init__.py
++++ b/django/core/management/__init__.py
+@@ -2,6 +2,7 @@ import os
+ import sys
+ from optparse import OptionParser, NO_DEFAULT
+ import imp
++import warnings
+ 
+ import django
+ from django.core.management.base import BaseCommand, CommandError, handle_default_options
+@@ -102,14 +103,6 @@ def get_commands():
+         except (AttributeError, EnvironmentError, ImportError):
+             apps = []
+ 
+-        # Find the project directory
+-        try:
+-            from django.conf import settings
+-            module = import_module(settings.SETTINGS_MODULE)
+-            project_directory = setup_environ(module, settings.SETTINGS_MODULE)
+-        except (AttributeError, EnvironmentError, ImportError, KeyError):
+-            project_directory = None
+-
+         # Find and load the management module for each installed app.
+         for app_name in apps:
+             try:
+@@ -119,17 +112,6 @@ def get_commands():
+             except ImportError:
+                 pass # No management module - ignore this app
+ 
+-        if project_directory:
+-            # Remove the "startproject" command from self.commands, because
+-            # that's a django-admin.py command, not a manage.py command.
+-            del _commands['startproject']                                           ##############################del
+-
+-            # Override the startapp command so that it always uses the
+-            # project_directory, not the current working directory
+-            # (which is default).
+-            from django.core.management.commands.startapp import ProjectCommand
+-            _commands['startapp'] = ProjectCommand(project_directory)
+-
+     return _commands
+ 
+ def call_command(name, *args, **options):
+@@ -388,6 +370,13 @@ def setup_environ(settings_mod, original_settings_path=None):
+     The "original_settings_path" parameter is optional, but recommended, since
+     trying to work out the original path from the module can be problematic.
+     """
++    warnings.warn(
++        "The 'setup_environ' function is deprecated, "
++        "you likely need to update your 'manage.py'; "
++        "please see the Django 1.4 release notes "
++        "(https://docs.djangoproject.com/en/dev/releases/1.4/).",
++        PendingDeprecationWarning)
++
+     # Add this project to sys.path so that it's importable in the conventional
+     # way. For example, if this file (manage.py) lives in a directory
+     # "myproject", this code would add "/path/to/myproject" to sys.path.
+@@ -437,6 +426,13 @@ def execute_manager(settings_mod, argv=None):
+     Like execute_from_command_line(), but for use by manage.py, a
+     project-specific django-admin.py utility.
+     """
++    warnings.warn(
++        "The 'execute_manager' function is deprecated, "
++        "you likely need to update your 'manage.py'; "
++        "please see the Django 1.4 release notes "
++        "(https://docs.djangoproject.com/en/dev/releases/1.4/).",
++        PendingDeprecationWarning)
++
+     setup_environ(settings_mod)
+     utility = ManagementUtility(argv)
+     utility.execute()
+diff --git a/django/core/management/commands/startproject.py b/django/core/management/commands/startproject.py
+index 712e43d..ce4d32b 100644
+--- a/django/core/management/commands/startproject.py
++++ b/django/core/management/commands/startproject.py
+@@ -15,8 +15,6 @@ class Command(LabelCommand):
+     can_import_settings = False
+ 
+     def handle_label(self, project_name, **options):
+-        # Determine the project_name a bit naively -- by looking at the name of
+-        # the parent directory.
+         directory = os.getcwd()
+ 
+         # Check that the project_name cannot be imported.
+@@ -30,7 +28,7 @@ class Command(LabelCommand):
+         copy_helper(self.style, 'project', project_name, directory)
+ 
+         # Create a random SECRET_KEY hash, and put it in the main settings.
+-        main_settings_file = os.path.join(directory, project_name, 'settings.py')
++        main_settings_file = os.path.join(directory, project_name, project_name, 'settings.py')
+         settings_contents = open(main_settings_file, 'r').read()
+         fp = open(main_settings_file, 'w')
+         secret_key = ''.join([choice('abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*(-_=+)') for i in range(50)])
+diff --git a/docs/internals/deprecation.txt b/docs/internals/deprecation.txt
+index 9e88ec4..b438fd6 100644
+--- a/docs/internals/deprecation.txt
++++ b/docs/internals/deprecation.txt
+@@ -246,6 +246,11 @@ these changes.
+ 
+     * The Databrowse contrib module will be removed.
+ 
++    * The functions :func:`~django.core.management.setup_environ` and
++      :func:`~django.core.management.execute_manager` will be removed from
++      :mod:`django.core.management`. This also means that the old (pre-1.4)
++      style of :file:`manage.py` file will no longer work.
++
+ 2.0
+ ---
+ 
+diff --git a/docs/intro/tutorial01.txt b/docs/intro/tutorial01.txt
+index 2f2e049..97743dc 100644
+--- a/docs/intro/tutorial01.txt
++++ b/docs/intro/tutorial01.txt
+@@ -90,41 +90,58 @@ within your Python installation. Consider symlinking to :doc:`django-admin.py
+ Let's look at what :djadmin:`startproject` created::
+ 
+     mysite/
+-        __init__.py
+         manage.py
+-        settings.py
+-        urls.py
++        mysite/
++            __init__.py
++            settings.py
++            urls.py
++
++.. admonition:: Doesn't match what you see?
++
++    The default project layout recently changed. If you're seeing a "flat"
++    layout (with no inner :file:`mysite/` directory), you're probably using
++    a version of Django that doesn't match this tutorial version.  You'll
++    want to either switch to the older tutorial or the newer Django version.
+ 
+ These files are:
+ 
+-    * :file:`__init__.py`: An empty file that tells Python that this directory
+-      should be considered a Python package. (Read `more about packages`_ in the
+-      official Python docs if you're a Python beginner.)
++* The outer :file:`mysite/` directory is just a container for your
++  project. Its name doesn't matter to Django; you can rename it to anything
++  you like.
++
++* :file:`manage.py`: A command-line utility that lets you interact with this
++  Django project in various ways. You can read all the details about
++  :file:`manage.py` in :doc:`/ref/django-admin`.
+ 
+-    * :file:`manage.py`: A command-line utility that lets you interact with this
+-      Django project in various ways. You can read all the details about
+-      :file:`manage.py` in :doc:`/ref/django-admin`.
++* The inner :file:`mysite/` directory is the actual Python package for your
++  project. Its name is the Python package name you'll need to use to import
++  anything inside it (e.g. ``import mysite.settings``).
+ 
+-    * :file:`settings.py`: Settings/configuration for this Django project.
+-      :doc:`/topics/settings` will tell you all about how settings work.
++* :file:`mysite/__init__.py`: An empty file that tells Python that this
++  directory should be considered a Python package. (Read `more about
++  packages`_ in the official Python docs if you're a Python beginner.)
+ 
+-    * :file:`urls.py`: The URL declarations for this Django project; a "table of
+-      contents" of your Django-powered site. You can read more about URLs in
+-      :doc:`/topics/http/urls`.
++* :file:`mysite/settings.py`: Settings/configuration for this Django
++  project.  :doc:`/topics/settings` will tell you all about how settings
++  work.
++
++* :file:`mysite/urls.py`: The URL declarations for this Django project; a
++  "table of contents" of your Django-powered site. You can read more about
++  URLs in :doc:`/topics/http/urls`.
+ 
+ .. _more about packages: http://docs.python.org/tutorial/modules.html#packages
+ 
+ The development server
+ ----------------------
+ 
+-Let's verify this worked. Change into the :file:`mysite` directory, if you
+-haven't already, and run the command ``python manage.py runserver``. You'll see
+-the following output on the command line::
++Let's verify this worked. Change into the outer :file:`mysite` directory, if
++you haven't already, and run the command ``python manage.py runserver``. You'll
++see the following output on the command line::
+ 
+     Validating models...
+     0 errors found.
+ 
+-    Django version 1.0, using settings 'mysite.settings'
++    Django version 1.4, using settings 'mysite.settings'
+     Development server is running at http://127.0.0.1:8000/
+     Quit the server with CONTROL-C.
+ 
+@@ -168,7 +185,7 @@ It worked!
+ Database setup
+ --------------
+ 
+-Now, edit :file:`settings.py`. It's a normal Python module with
++Now, edit :file:`mysite/settings.py`. It's a normal Python module with
+ module-level variables representing Django settings. Change the
+ following keys in the :setting:`DATABASES` ``'default'`` item to match
+ your databases connection settings.
+@@ -286,10 +303,11 @@ so you can focus on writing code rather than creating directories.
+     multiple apps. An app can be in multiple projects.
+ 
+ Your apps can live anywhere on your `Python path`_. In this tutorial, we'll
+-create our poll app in the :file:`mysite` directory for simplicity.
++create our poll app right next to your :file:`manage.py` file so that it can be
++imported as its own top-level module, rather than a submodule of ``mysite``.
+ 
+-To create your app, make sure you're in the :file:`mysite` directory and type
+-this command:
++To create your app, make sure you're in the same directory as :file:`manage.py`
++and type this command:
+ 
+ .. code-block:: bash
+ 
+@@ -499,27 +517,16 @@ API Django gives you. To invoke the Python shell, use this command:
+ 
+     python manage.py shell
+ 
+-We're using this instead of simply typing "python", because ``manage.py`` sets
+-up the project's environment for you. "Setting up the environment" involves two
+-things:
+-
+-    * Putting ``polls`` on ``sys.path``. For flexibility, several pieces of
+-      Django refer to projects in Python dotted-path notation (e.g.
+-      ``'polls.models'``). In order for this to work, the ``polls``
+-      package has to be on ``sys.path``.
+-
+-      We've already seen one example of this: the :setting:`INSTALLED_APPS`
+-      setting is a list of packages in dotted-path notation.
+-
+-    * Setting the ``DJANGO_SETTINGS_MODULE`` environment variable, which gives
+-      Django the path to your ``settings.py`` file.
++We're using this instead of simply typing "python", because :file:`manage.py`
++sets the ``DJANGO_SETTINGS_MODULE`` environment variable, which gives Django
++the Python import path to your :file:`settings.py` file.
+ 
+ .. admonition:: Bypassing manage.py
+ 
+-    If you'd rather not use ``manage.py``, no problem. Just make sure ``mysite``
+-    and ``polls`` are at the root level on the Python path (i.e., ``import mysite``
+-    and ``import polls`` work) and set the ``DJANGO_SETTINGS_MODULE`` environment
+-    variable to ``mysite.settings``.
++    If you'd rather not use :file:`manage.py`, no problem. Just set the
++    ``DJANGO_SETTINGS_MODULE`` environment variable to ``mysite.settings`` and
++    run ``python`` from the same directory :file:`manage.py` is in (or ensure
++    that directory is on the Python path, so that ``import mysite`` works).
+ 
+     For more information on all of this, see the :doc:`django-admin.py
+     documentation </ref/django-admin>`.
+diff --git a/docs/ref/django-admin.txt b/docs/ref/django-admin.txt
+index c07b61c..88c2569 100644
+--- a/docs/ref/django-admin.txt
++++ b/docs/ref/django-admin.txt
+@@ -907,12 +907,6 @@ startproject <projectname>
+ Creates a Django project directory structure for the given project name in the
+ current directory.
+ 
+-This command is disabled when the ``--settings`` option to
+-``django-admin.py`` is used, or when the environment variable
+-``DJANGO_SETTINGS_MODULE`` has been set. To re-enable it in these
+-situations, either omit the ``--settings`` option or unset
+-``DJANGO_SETTINGS_MODULE``.
+-
+ syncdb
+ ------
+ 
+diff --git a/docs/releases/1.4.txt b/docs/releases/1.4.txt
+index b71fd21..7ad403c 100644
+--- a/docs/releases/1.4.txt
++++ b/docs/releases/1.4.txt
+@@ -328,6 +328,73 @@ a :class:`~django.forms.fields.GenericIPAddressField` form field and
+ the validators :data:`~django.core.validators.validate_ipv46_address` and
+ :data:`~django.core.validators.validate_ipv6_address`
+ 
++Updated default project layout and ``manage.py``
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++Django 1.4 ships with an updated default project layout and ``manage.py`` file
++for the :djadmin:`startproject` management command. These fix some issues with
++the previous ``manage.py`` handling of Python import paths that caused double
++imports, trouble moving from development to deployment, and other
++difficult-to-debug path issues.
++
++The previous ``manage.py`` calls functions that are now deprecated, and thus
++projects upgrading to Django 1.4 should update their ``manage.py``. (The
++old-style ``manage.py`` will continue to work as before until Django 1.6; in
++1.5 it will raise ``DeprecationWarning``).
++
++The new recommended ``manage.py`` file should look like this::
++
++    #!/usr/bin/env python
++    import os, sys
++
++    if __name__ == "__main__":
++        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ project_name }}.settings")
++
++        from django.core.management import execute_from_command_line
++
++        execute_from_command_line(sys.argv)
++
++``{{ project_name }}`` should be replaced with the Python package name of the
++actual project.
++
++If settings, URLconf, and apps within the project are imported or referenced
++using the project-name prefix (e.g. ``myproject.settings``, ``ROOT_URLCONF =
++``myproject.urls``, etc), the new ``manage.py`` will need to be moved one
++directory up, so it is outside the project package rather than adjacent to
++``settings.py`` and ``urls.py``.
++
++For instance, with the following layout::
++
++    manage.py
++    mysite/
++        __init__.py
++        settings.py
++        urls.py
++        myapp/
++            __init__.py
++            models.py
++
++You could import ``mysite.settings``, ``mysite.urls``, and ``mysite.myapp``,
++but not ``settings``, ``urls``, or ``myapp`` as top-level modules.
++
++Anything imported as a top-level module can be placed adjacent to the new
++``manage.py``. For instance, to decouple "myapp" from the project module and
++import it as just ``myapp``, place it outside the ``mysite/`` directory::
++
++    manage.py
++    myapp/
++        __init__.py
++        models.py
++    mysite/
++        __init__.py
++        settings.py
++        urls.py
++
++If the same code is imported inconsistently (some places with the project
++prefix, some places without it), the imports will need to be cleaned up when
++switching to the new ``manage.py``.
++
++
+ Minor features
+ ~~~~~~~~~~~~~~
+ 
+@@ -729,3 +796,26 @@ The code that powers Databrowse is licensed under the same terms as Django
+ itself, and so is available to be adopted by an individual or group as
+ a third-party project.
+ 
++``django.core.management.setup_environ``
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++This function temporarily modified ``sys.path`` in order to make the parent
++"project" directory importable under the old flat :djadmin:`startproject`
++layout. This function is now deprecated, as its path workarounds are no longer
++needed with the new ``manage.py`` and default project layout.
++
++This function was never documented or public API, but was widely recommended
++for use in setting up a "Django environment" for a user script. These uses
++should be replaced by setting the ``DJANGO_SETTINGS_MODULE`` environment
++variable or using :func:`django.conf.settings.configure`.
++
++``django.core.management.execute_manager``
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++This function was previously used by ``manage.py`` to execute a management
++command. It is identical to
++``django.core.management.execute_from_command_line``, except that it first
++calls ``setup_environ``, which is now deprecated. ``execute_manager`` is also
++deprecated; ``execute_from_command_line`` can be used instead. (Neither of
++these functions is documented public API, but a deprecation path is needed due
++to use in existing ``manage.py`` files.)
+diff --git a/tests/regressiontests/admin_scripts/tests.py b/tests/regressiontests/admin_scripts/tests.py
+index cf0dfc6..8580e36 100644
+--- a/tests/regressiontests/admin_scripts/tests.py
++++ b/tests/regressiontests/admin_scripts/tests.py
+@@ -3,6 +3,8 @@ A series of tests to establish that the command-line managment tools work as
+ advertised - especially with regards to the handling of the DJANGO_SETTINGS_MODULE
+ and default settings.py files.
+ """
++from __future__ import with_statement
++
+ import os
+ import shutil
+ import sys
+@@ -35,7 +37,7 @@ class AdminScriptTestCase(unittest.TestCase):
+                 settings_file.write("%s = %s\n" % (s, o))
+ 
+         if apps is None:
+-            apps = ['django.contrib.auth', 'django.contrib.contenttypes', 'admin_scripts']
++            apps = ['django.contrib.auth', 'django.contrib.contenttypes', 'regressiontests.admin_scripts']
+ 
+         settings_file.write("INSTALLED_APPS = %s\n" % apps)
+ 
+@@ -100,7 +102,7 @@ class AdminScriptTestCase(unittest.TestCase):
+             os.environ['DJANGO_SETTINGS_MODULE'] = settings_file
+         elif 'DJANGO_SETTINGS_MODULE' in os.environ:
+             del os.environ['DJANGO_SETTINGS_MODULE']
+-        python_path = [test_dir, base_dir]
++        python_path = [project_dir, base_dir]
+         python_path.extend(ext_backend_base_dirs)
+         os.environ[python_path_var_name] = os.pathsep.join(python_path)
+ 
+@@ -148,6 +150,13 @@ class AdminScriptTestCase(unittest.TestCase):
+         test_manage_py = os.path.join(test_dir, 'manage.py')
+         shutil.copyfile(template_manage_py, test_manage_py)
+ 
++        with open(test_manage_py, 'r') as fp:
++            manage_py_contents = fp.read()
++        manage_py_contents = manage_py_contents.replace(
++            "{{ project_name }}", "regressiontests")
++        with open(test_manage_py, 'w') as fp:
++            fp.write(manage_py_contents)
++
+         stdout, stderr = self.run_test('./manage.py', args, settings_file)
+ 
+         # Cleanup - remove the generated manage.py script
+@@ -224,7 +233,7 @@ class DjangoAdminDefaultSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "default: django-admin builtin commands succeed if settings are provided as argument"
+-        args = ['sqlall','--settings=settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.settings', 'admin_scripts']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+@@ -232,7 +241,7 @@ class DjangoAdminDefaultSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "default: django-admin builtin commands succeed if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+ 
+@@ -259,7 +268,7 @@ class DjangoAdminDefaultSettings(AdminScriptTestCase):
+ 
+     def test_custom_command_with_settings(self):
+         "default: django-admin can execute user commands if settings are provided as argument"
+-        args = ['noargs_command', '--settings=settings']
++        args = ['noargs_command', '--settings=regressiontests.settings']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+@@ -267,7 +276,7 @@ class DjangoAdminDefaultSettings(AdminScriptTestCase):
+     def test_custom_command_with_environment(self):
+         "default: django-admin can execute user commands if settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+ 
+@@ -290,7 +299,7 @@ class DjangoAdminFullPathDefaultSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "fulldefault: django-admin builtin commands succeed if a settings file is provided"
+-        args = ['sqlall','--settings=settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.settings', 'admin_scripts']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+@@ -298,7 +307,7 @@ class DjangoAdminFullPathDefaultSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "fulldefault: django-admin builtin commands succeed if the environment contains settings"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+ 
+@@ -325,7 +334,7 @@ class DjangoAdminFullPathDefaultSettings(AdminScriptTestCase):
+ 
+     def test_custom_command_with_settings(self):
+         "fulldefault: django-admin can execute user commands if settings are provided as argument"
+-        args = ['noargs_command', '--settings=settings']
++        args = ['noargs_command', '--settings=regressiontests.settings']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+@@ -333,7 +342,7 @@ class DjangoAdminFullPathDefaultSettings(AdminScriptTestCase):
+     def test_custom_command_with_environment(self):
+         "fulldefault: django-admin can execute user commands if settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+ 
+@@ -356,7 +365,7 @@ class DjangoAdminMinimalSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "minimal: django-admin builtin commands fail if settings are provided as argument"
+-        args = ['sqlall','--settings=settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.settings', 'admin_scripts']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(out)
+         self.assertOutput(err, 'App with label admin_scripts could not be found')
+@@ -364,7 +373,7 @@ class DjangoAdminMinimalSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "minimal: django-admin builtin commands fail if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.assertNoOutput(out)
+         self.assertOutput(err, 'App with label admin_scripts could not be found')
+ 
+@@ -391,7 +400,7 @@ class DjangoAdminMinimalSettings(AdminScriptTestCase):
+ 
+     def test_custom_command_with_settings(self):
+         "minimal: django-admin can't execute user commands, even if settings are provided as argument"
+-        args = ['noargs_command', '--settings=settings']
++        args = ['noargs_command', '--settings=regressiontests.settings']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(out)
+         self.assertOutput(err, "Unknown command: 'noargs_command'")
+@@ -399,7 +408,7 @@ class DjangoAdminMinimalSettings(AdminScriptTestCase):
+     def test_custom_command_with_environment(self):
+         "minimal: django-admin can't execute user commands, even if settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.assertNoOutput(out)
+         self.assertOutput(err, "Unknown command: 'noargs_command'")
+ 
+@@ -422,7 +431,7 @@ class DjangoAdminAlternateSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "alternate: django-admin builtin commands succeed if settings are provided as argument"
+-        args = ['sqlall','--settings=alternate_settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.alternate_settings', 'admin_scripts']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+@@ -430,7 +439,7 @@ class DjangoAdminAlternateSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "alternate: django-admin builtin commands succeed if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_django_admin(args,'alternate_settings')
++        out, err = self.run_django_admin(args,'regressiontests.alternate_settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+ 
+@@ -457,7 +466,7 @@ class DjangoAdminAlternateSettings(AdminScriptTestCase):
+ 
+     def test_custom_command_with_settings(self):
+         "alternate: django-admin can execute user commands if settings are provided as argument"
+-        args = ['noargs_command', '--settings=alternate_settings']
++        args = ['noargs_command', '--settings=regressiontests.alternate_settings']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+@@ -465,7 +474,7 @@ class DjangoAdminAlternateSettings(AdminScriptTestCase):
+     def test_custom_command_with_environment(self):
+         "alternate: django-admin can execute user commands if settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_django_admin(args,'alternate_settings')
++        out, err = self.run_django_admin(args,'regressiontests.alternate_settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+ 
+@@ -493,7 +502,7 @@ class DjangoAdminMultipleSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "alternate: django-admin builtin commands succeed if settings are provided as argument"
+-        args = ['sqlall','--settings=alternate_settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.alternate_settings', 'admin_scripts']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+@@ -501,7 +510,7 @@ class DjangoAdminMultipleSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "alternate: django-admin builtin commands succeed if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_django_admin(args,'alternate_settings')
++        out, err = self.run_django_admin(args,'regressiontests.alternate_settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+ 
+@@ -526,16 +535,16 @@ class DjangoAdminMultipleSettings(AdminScriptTestCase):
+         self.assertOutput(err, "Unknown command: 'noargs_command'")
+ 
+     def test_custom_command_with_settings(self):
+-        "alternate: django-admin can't execute user commands, even if settings are provided as argument"
+-        args = ['noargs_command', '--settings=alternate_settings']
++        "alternate: django-admin can execute user commands if settings are provided as argument"
++        args = ['noargs_command', '--settings=regressiontests.alternate_settings']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+ 
+     def test_custom_command_with_environment(self):
+-        "alternate: django-admin can't execute user commands, even if settings are provided in environment"
++        "alternate: django-admin can execute user commands if settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_django_admin(args,'alternate_settings')
++        out, err = self.run_django_admin(args,'regressiontests.alternate_settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+ 
+@@ -557,7 +566,7 @@ class DjangoAdminSettingsDirectory(AdminScriptTestCase):
+         test_dir = os.path.dirname(os.path.dirname(__file__))
+         args = ['startapp','settings_test']
+         app_path = os.path.join(test_dir, 'settings_test')
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.addCleanup(shutil.rmtree, app_path)
+         self.assertNoOutput(err)
+         self.assertTrue(os.path.exists(app_path))
+@@ -591,7 +600,7 @@ class DjangoAdminSettingsDirectory(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "directory: django-admin builtin commands succeed if settings are provided as argument"
+-        args = ['sqlall','--settings=settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.settings', 'admin_scripts']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+@@ -599,7 +608,7 @@ class DjangoAdminSettingsDirectory(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "directory: django-admin builtin commands succeed if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_django_admin(args,'settings')
++        out, err = self.run_django_admin(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+ 
+@@ -618,21 +627,21 @@ class ManageNoSettings(AdminScriptTestCase):
+         args = ['sqlall','admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(err, "Could not import settings 'regressiontests.settings'")
+ 
+     def test_builtin_with_bad_settings(self):
+         "no settings: manage.py builtin commands fail if settings file (from argument) doesn't exist"
+         args = ['sqlall','--settings=bad_settings', 'admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(err, "Could not import settings 'bad_settings'")
+ 
+     def test_builtin_with_bad_environment(self):
+         "no settings: manage.py builtin commands fail if settings file (from environment) doesn't exist"
+         args = ['sqlall','admin_scripts']
+         out, err = self.run_manage(args,'bad_settings')
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(err, "Could not import settings 'bad_settings'")
+ 
+ 
+ class ManageDefaultSettings(AdminScriptTestCase):
+@@ -654,7 +663,7 @@ class ManageDefaultSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "default: manage.py builtin commands succeed if settings are provided as argument"
+-        args = ['sqlall','--settings=settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.settings', 'admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+@@ -662,7 +671,7 @@ class ManageDefaultSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "default: manage.py builtin commands succeed if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_manage(args,'settings')
++        out, err = self.run_manage(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+ 
+@@ -689,7 +698,7 @@ class ManageDefaultSettings(AdminScriptTestCase):
+ 
+     def test_custom_command_with_settings(self):
+         "default: manage.py can execute user commands when settings are provided as argument"
+-        args = ['noargs_command', '--settings=settings']
++        args = ['noargs_command', '--settings=regressiontests.settings']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+@@ -697,7 +706,7 @@ class ManageDefaultSettings(AdminScriptTestCase):
+     def test_custom_command_with_environment(self):
+         "default: manage.py can execute user commands when settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_manage(args,'settings')
++        out, err = self.run_manage(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+ 
+@@ -721,7 +730,7 @@ class ManageFullPathDefaultSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "fulldefault: manage.py builtin commands succeed if settings are provided as argument"
+-        args = ['sqlall','--settings=settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.settings', 'admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+@@ -729,7 +738,7 @@ class ManageFullPathDefaultSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "fulldefault: manage.py builtin commands succeed if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_manage(args,'settings')
++        out, err = self.run_manage(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'CREATE TABLE')
+ 
+@@ -756,7 +765,7 @@ class ManageFullPathDefaultSettings(AdminScriptTestCase):
+ 
+     def test_custom_command_with_settings(self):
+         "fulldefault: manage.py can execute user commands when settings are provided as argument"
+-        args = ['noargs_command', '--settings=settings']
++        args = ['noargs_command', '--settings=regressiontests.settings']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+@@ -764,7 +773,7 @@ class ManageFullPathDefaultSettings(AdminScriptTestCase):
+     def test_custom_command_with_environment(self):
+         "fulldefault: manage.py can execute user commands when settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_manage(args,'settings')
++        out, err = self.run_manage(args,'regressiontests.settings')
+         self.assertNoOutput(err)
+         self.assertOutput(out, "EXECUTE:NoArgsCommand")
+ 
+@@ -787,7 +796,7 @@ class ManageMinimalSettings(AdminScriptTestCase):
+ 
+     def test_builtin_with_settings(self):
+         "minimal: manage.py builtin commands fail if settings are provided as argument"
+-        args = ['sqlall','--settings=settings', 'admin_scripts']
++        args = ['sqlall','--settings=regressiontests.settings', 'admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+         self.assertOutput(err, 'App with label admin_scripts could not be found')
+@@ -795,7 +804,7 @@ class ManageMinimalSettings(AdminScriptTestCase):
+     def test_builtin_with_environment(self):
+         "minimal: manage.py builtin commands fail if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+-        out, err = self.run_manage(args,'settings')
++        out, err = self.run_manage(args,'regressiontests.settings')
+         self.assertNoOutput(out)
+         self.assertOutput(err, 'App with label admin_scripts could not be found')
+ 
+@@ -822,7 +831,7 @@ class ManageMinimalSettings(AdminScriptTestCase):
+ 
+     def test_custom_command_with_settings(self):
+         "minimal: manage.py can't execute user commands, even if settings are provided as argument"
+-        args = ['noargs_command', '--settings=settings']
++        args = ['noargs_command', '--settings=regressiontests.settings']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+         self.assertOutput(err, "Unknown command: 'noargs_command'")
+@@ -830,7 +839,7 @@ class ManageMinimalSettings(AdminScriptTestCase):
+     def test_custom_command_with_environment(self):
+         "minimal: manage.py can't execute user commands, even if settings are provided in environment"
+         args = ['noargs_command']
+-        out, err = self.run_manage(args,'settings')
++        out, err = self.run_manage(args,'regressiontests.settings')
+         self.assertNoOutput(out)
+         self.assertOutput(err, "Unknown command: 'noargs_command'")
+ 
+@@ -849,56 +858,56 @@ class ManageAlternateSettings(AdminScriptTestCase):
+         args = ['sqlall','admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(err, "Could not import settings 'regressiontests.settings'")
+ 
+     def test_builtin_with_settings(self):
+-        "alternate: manage.py builtin commands fail if settings are provided as argument but no defaults"
++        "alternate: manage.py builtin commands work with settings provided as argument"
+         args = ['sqlall','--settings=alternate_settings', 'admin_scripts']
+         out, err = self.run_manage(args)
+-        self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(out, 'CREATE TABLE "admin_scripts_article"')
++        self.assertNoOutput(err)
+ 
+     def test_builtin_with_environment(self):
+-        "alternate: manage.py builtin commands fail if settings are provided in the environment but no defaults"
++        "alternate: manage.py builtin commands work if settings are provided in the environment"
+         args = ['sqlall','admin_scripts']
+         out, err = self.run_manage(args,'alternate_settings')
+-        self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(out, 'CREATE TABLE "admin_scripts_article"')
++        self.assertNoOutput(err)
+ 
+     def test_builtin_with_bad_settings(self):
+         "alternate: manage.py builtin commands fail if settings file (from argument) doesn't exist"
+         args = ['sqlall','--settings=bad_settings', 'admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(err, "Could not import settings 'bad_settings'")
+ 
+     def test_builtin_with_bad_environment(self):
+         "alternate: manage.py builtin commands fail if settings file (from environment) doesn't exist"
+         args = ['sqlall','admin_scripts']
+         out, err = self.run_manage(args,'bad_settings')
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(err, "Could not import settings 'bad_settings'")
+ 
+     def test_custom_command(self):
+-        "alternate: manage.py can't execute user commands"
++        "alternate: manage.py can't execute user commands without settings"
+         args = ['noargs_command']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(err, "Unknown command: 'noargs_command'")
+ 
+     def test_custom_command_with_settings(self):
+-        "alternate: manage.py can't execute user commands, even if settings are provided as argument"
++        "alternate: manage.py can execute user commands if settings are provided as argument"
+         args = ['noargs_command', '--settings=alternate_settings']
+         out, err = self.run_manage(args)
+-        self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(out, "EXECUTE:NoArgsCommand options=[('pythonpath', None), ('settings', 'alternate_settings'), ('traceback', None), ('verbosity', '1')]")
++        self.assertNoOutput(err)
+ 
+     def test_custom_command_with_environment(self):
+-        "alternate: manage.py can't execute user commands, even if settings are provided in environment"
++        "alternate: manage.py can execute user commands if settings are provided in environment"
+         args = ['noargs_command']
+         out, err = self.run_manage(args,'alternate_settings')
+-        self.assertNoOutput(out)
+-        self.assertOutput(err, "Can't find the file 'settings.py' in the directory containing './manage.py'")
++        self.assertOutput(out, "EXECUTE:NoArgsCommand options=[('pythonpath', None), ('settings', None), ('traceback', None), ('verbosity', '1')]")
++        self.assertNoOutput(err)
+ 
+ 
+ class ManageMultipleSettings(AdminScriptTestCase):
+@@ -999,7 +1008,7 @@ class ManageSettingsWithImportError(AdminScriptTestCase):
+         args = ['sqlall','admin_scripts']
+         out, err = self.run_manage(args)
+         self.assertNoOutput(out)
+-        self.assertOutput(err, "ImportError: No module named foo42bar")
++        self.assertOutput(err, "No module named foo42bar")
+ 
+ class ManageValidate(AdminScriptTestCase):
+     def tearDown(self):
+diff --git a/tests/regressiontests/test_runner/tests.py b/tests/regressiontests/test_runner/tests.py
+index cb4d27a..d2f064e 100644
+--- a/tests/regressiontests/test_runner/tests.py
++++ b/tests/regressiontests/test_runner/tests.py
+@@ -188,25 +188,25 @@ class CustomTestRunnerOptionsTests(AdminScriptTestCase):
+         self.remove_settings('settings.py')
+ 
+     def test_default_options(self):
+-        args = ['test', '--settings=settings']
++        args = ['test', '--settings=regressiontests.settings']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, '1:2:3')
+ 
+     def test_default_and_given_options(self):
+-        args = ['test', '--settings=settings', '--option_b=foo']
++        args = ['test', '--settings=regressiontests.settings', '--option_b=foo']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, '1:foo:3')
+ 
+     def test_option_name_and_value_separated(self):
+-        args = ['test', '--settings=settings', '--option_b', 'foo']
++        args = ['test', '--settings=regressiontests.settings', '--option_b', 'foo']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, '1:foo:3')
+ 
+     def test_all_options_given(self):
+-        args = ['test', '--settings=settings', '--option_a=bar', '--option_b=foo', '--option_c=31337']
++        args = ['test', '--settings=regressiontests.settings', '--option_a=bar', '--option_b=foo', '--option_c=31337']
+         out, err = self.run_django_admin(args)
+         self.assertNoOutput(err)
+         self.assertOutput(out, 'bar:foo:31337')
+

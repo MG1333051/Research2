@@ -1,0 +1,1745 @@
+commit c91667338a4e774e2819ccf4da852dc7b759bc19
+Author: Claude Paroz <claude@2xlibre.net>
+Date:   Sat Dec 8 11:13:52 2012 +0100
+
+    Fixed #19357 -- Allow non-ASCII chars in filesystem paths
+    
+    Thanks kujiu for the report and Aymeric Augustin for the review.
+
+diff --git a/django/contrib/admindocs/views.py b/django/contrib/admindocs/views.py
+index 94963b4..cb0c116 100644
+--- a/django/contrib/admindocs/views.py
++++ b/django/contrib/admindocs/views.py
+@@ -14,6 +14,7 @@ from django.core import urlresolvers
+ from django.contrib.admindocs import utils
+ from django.contrib.sites.models import Site
+ from django.utils.importlib import import_module
++from django.utils._os import upath
+ from django.utils import six
+ from django.utils.translation import ugettext as _
+ from django.utils.safestring import mark_safe
+@@ -311,7 +312,7 @@ def load_all_installed_template_libraries():
+         try:
+             libraries = [
+                 os.path.splitext(p)[0]
+-                for p in os.listdir(os.path.dirname(mod.__file__))
++                for p in os.listdir(os.path.dirname(upath(mod.__file__)))
+                 if p.endswith('.py') and p[0].isalpha()
+             ]
+         except OSError:
+diff --git a/django/contrib/auth/tests/context_processors.py b/django/contrib/auth/tests/context_processors.py
+index 32fea8a..f846a82 100644
+--- a/django/contrib/auth/tests/context_processors.py
++++ b/django/contrib/auth/tests/context_processors.py
+@@ -9,6 +9,7 @@ from django.contrib.auth.context_processors import PermWrapper, PermLookupDict
+ from django.db.models import Q
+ from django.test import TestCase
+ from django.test.utils import override_settings
++from django.utils._os import upath
+ 
+ 
+ class MockUser(object):
+@@ -63,7 +64,7 @@ class PermWrapperTests(TestCase):
+ @skipIfCustomUser
+ @override_settings(
+     TEMPLATE_DIRS=(
+-            os.path.join(os.path.dirname(__file__), 'templates'),
++            os.path.join(os.path.dirname(upath(__file__)), 'templates'),
+         ),
+     USE_TZ=False,                           # required for loading the fixture
+     PASSWORD_HASHERS=('django.contrib.auth.hashers.SHA1PasswordHasher',),
+diff --git a/django/contrib/auth/tests/forms.py b/django/contrib/auth/tests/forms.py
+index 286652e..2589068 100644
+--- a/django/contrib/auth/tests/forms.py
++++ b/django/contrib/auth/tests/forms.py
+@@ -11,6 +11,7 @@ from django.forms.fields import Field, EmailField
+ from django.test import TestCase
+ from django.test.utils import override_settings
+ from django.utils.encoding import force_text
++from django.utils._os import upath
+ from django.utils import translation
+ from django.utils.translation import ugettext as _
+ 
+@@ -331,7 +332,7 @@ class PasswordResetFormTest(TestCase):
+         self.assertEqual(form.cleaned_data['email'], email)
+ 
+     def test_custom_email_subject(self):
+-        template_path = os.path.join(os.path.dirname(__file__), 'templates')
++        template_path = os.path.join(os.path.dirname(upath(__file__)), 'templates')
+         with self.settings(TEMPLATE_DIRS=(template_path,)):
+             data = {'email': 'testclient@example.com'}
+             form = PasswordResetForm(data)
+diff --git a/django/contrib/auth/tests/views.py b/django/contrib/auth/tests/views.py
+index b97d4a7..0e83ca4 100644
+--- a/django/contrib/auth/tests/views.py
++++ b/django/contrib/auth/tests/views.py
+@@ -11,6 +11,7 @@ from django.http import QueryDict
+ from django.utils.encoding import force_text
+ from django.utils.html import escape
+ from django.utils.http import urlquote
++from django.utils._os import upath
+ from django.test import TestCase
+ from django.test.utils import override_settings
+ 
+@@ -27,7 +28,7 @@ from django.contrib.auth.tests.utils import skipIfCustomUser
+     LANGUAGE_CODE='en',
+     TEMPLATE_LOADERS=global_settings.TEMPLATE_LOADERS,
+     TEMPLATE_DIRS=(
+-        os.path.join(os.path.dirname(__file__), 'templates'),
++        os.path.join(os.path.dirname(upath(__file__)), 'templates'),
+     ),
+     USE_TZ=False,
+     PASSWORD_HASHERS=('django.contrib.auth.hashers.SHA1PasswordHasher',),
+diff --git a/django/contrib/formtools/tests/__init__.py b/django/contrib/formtools/tests/__init__.py
+index a21ffde..aa7d5ff 100644
+--- a/django/contrib/formtools/tests/__init__.py
++++ b/django/contrib/formtools/tests/__init__.py
+@@ -14,6 +14,7 @@ from django.contrib.formtools.wizard import FormWizard
+ from django.test import TestCase
+ from django.test.html import parse_html
+ from django.test.utils import override_settings
++from django.utils._os import upath
+ from django.utils import unittest
+ 
+ from django.contrib.formtools.tests.wizard import *
+@@ -36,7 +37,7 @@ class TestFormPreview(preview.FormPreview):
+ 
+ @override_settings(
+     TEMPLATE_DIRS=(
+-        os.path.join(os.path.dirname(__file__), 'templates'),
++        os.path.join(os.path.dirname(upath(__file__)), 'templates'),
+     ),
+ )
+ class PreviewTests(TestCase):
+@@ -214,7 +215,7 @@ class DummyRequest(http.HttpRequest):
+ @override_settings(
+     SECRET_KEY="123",
+     TEMPLATE_DIRS=(
+-        os.path.join(os.path.dirname(__file__), 'templates'),
++        os.path.join(os.path.dirname(upath(__file__)), 'templates'),
+     ),
+ )
+ class WizardTests(TestCase):
+diff --git a/django/contrib/formtools/tests/wizard/wizardtests/tests.py b/django/contrib/formtools/tests/wizard/wizardtests/tests.py
+index 6403a55..4aaea7d 100644
+--- a/django/contrib/formtools/tests/wizard/wizardtests/tests.py
++++ b/django/contrib/formtools/tests/wizard/wizardtests/tests.py
+@@ -9,6 +9,7 @@ from django.conf import settings
+ from django.contrib.auth.models import User
+ from django.contrib.formtools.wizard.views import CookieWizardView
+ from django.contrib.formtools.tests.wizard.forms import UserForm, UserFormSet
++from django.utils._os import upath
+ 
+ 
+ class WizardTests(object):
+@@ -86,7 +87,7 @@ class WizardTests(object):
+         self.assertEqual(response.context['wizard']['steps'].current, 'form2')
+ 
+         post_data = self.wizard_step_data[1]
+-        post_data['form2-file1'] = open(__file__, 'rb')
++        post_data['form2-file1'] = open(upath(__file__), 'rb')
+         response = self.client.post(self.wizard_url, post_data)
+         self.assertEqual(response.status_code, 200)
+         self.assertEqual(response.context['wizard']['steps'].current, 'form3')
+@@ -99,7 +100,7 @@ class WizardTests(object):
+         self.assertEqual(response.status_code, 200)
+ 
+         all_data = response.context['form_list']
+-        with open(__file__, 'rb') as f:
++        with open(upath(__file__), 'rb') as f:
+             self.assertEqual(all_data[1]['file1'].read(), f.read())
+         all_data[1]['file1'].close()
+         del all_data[1]['file1']
+@@ -118,7 +119,7 @@ class WizardTests(object):
+         self.assertEqual(response.status_code, 200)
+ 
+         post_data = self.wizard_step_data[1]
+-        with open(__file__, 'rb') as post_file:
++        with open(upath(__file__), 'rb') as post_file:
+             post_data['form2-file1'] = post_file
+             response = self.client.post(self.wizard_url, post_data)
+         self.assertEqual(response.status_code, 200)
+@@ -130,7 +131,7 @@ class WizardTests(object):
+         self.assertEqual(response.status_code, 200)
+ 
+         all_data = response.context['all_cleaned_data']
+-        with open(__file__, 'rb') as f:
++        with open(upath(__file__), 'rb') as f:
+             self.assertEqual(all_data['file1'].read(), f.read())
+         all_data['file1'].close()
+         del all_data['file1']
+@@ -150,7 +151,7 @@ class WizardTests(object):
+ 
+         post_data = self.wizard_step_data[1]
+         post_data['form2-file1'].close()
+-        post_data['form2-file1'] = open(__file__, 'rb')
++        post_data['form2-file1'] = open(upath(__file__), 'rb')
+         response = self.client.post(self.wizard_url, post_data)
+         self.assertEqual(response.status_code, 200)
+ 
+@@ -178,7 +179,7 @@ class WizardTests(object):
+ 
+         post_data = self.wizard_step_data[1]
+         post_data['form2-file1'].close()
+-        post_data['form2-file1'] = open(__file__, 'rb')
++        post_data['form2-file1'] = open(upath(__file__), 'rb')
+         response = self.client.post(self.wizard_url, post_data)
+         self.assertEqual(response.status_code, 200)
+         self.assertEqual(response.context['wizard']['steps'].current, 'form3')
+@@ -291,7 +292,7 @@ class WizardTestKwargs(TestCase):
+         self.wizard_step_data[0]['form1-user'] = self.testuser.pk
+ 
+     def test_template(self):
+-        templates = os.path.join(os.path.dirname(__file__), 'templates')
++        templates = os.path.join(os.path.dirname(upath(__file__)), 'templates')
+         with self.settings(
+                 TEMPLATE_DIRS=list(settings.TEMPLATE_DIRS) + [templates]):
+             response = self.client.get(self.wizard_url)
+diff --git a/django/contrib/gis/geometry/test_data.py b/django/contrib/gis/geometry/test_data.py
+index b0f6e1a..e13e858 100644
+--- a/django/contrib/gis/geometry/test_data.py
++++ b/django/contrib/gis/geometry/test_data.py
+@@ -7,13 +7,14 @@ import os
+ 
+ from django.contrib import gis
+ from django.utils import six
++from django.utils._os import upath
+ 
+ 
+ # This global used to store reference geometry data.
+ GEOMETRIES = None
+ 
+ # Path where reference test data is located.
+-TEST_DATA = os.path.join(os.path.dirname(gis.__file__), 'tests', 'data')
++TEST_DATA = os.path.join(os.path.dirname(upath(gis.__file__)), 'tests', 'data')
+ 
+ 
+ def tuplize(seq):
+diff --git a/django/contrib/gis/tests/geo3d/tests.py b/django/contrib/gis/tests/geo3d/tests.py
+index f7590fe..6b40164 100644
+--- a/django/contrib/gis/tests/geo3d/tests.py
++++ b/django/contrib/gis/tests/geo3d/tests.py
+@@ -7,12 +7,13 @@ from django.contrib.gis.db.models import Union, Extent3D
+ from django.contrib.gis.geos import GEOSGeometry, LineString, Point, Polygon
+ from django.contrib.gis.utils import LayerMapping, LayerMapError
+ from django.test import TestCase
++from django.utils._os import upath
+ 
+ from .models import (City3D, Interstate2D, Interstate3D, InterstateProj2D,
+     InterstateProj3D, Point2D, Point3D, MultiPoint3D, Polygon2D, Polygon3D)
+ 
+ 
+-data_path = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'data'))
++data_path = os.path.realpath(os.path.join(os.path.dirname(upath(__file__)), '..', 'data'))
+ city_file = os.path.join(data_path, 'cities', 'cities.shp')
+ vrt_file = os.path.join(data_path, 'test_vrt', 'test_vrt.vrt')
+ 
+diff --git a/django/contrib/gis/tests/geogapp/tests.py b/django/contrib/gis/tests/geogapp/tests.py
+index 2fd3560..a8c607c 100644
+--- a/django/contrib/gis/tests/geogapp/tests.py
++++ b/django/contrib/gis/tests/geogapp/tests.py
+@@ -8,6 +8,7 @@ import os
+ from django.contrib.gis import gdal
+ from django.contrib.gis.measure import D
+ from django.test import TestCase
++from django.utils._os import upath
+ 
+ from .models import City, County, Zipcode
+ 
+@@ -61,7 +62,7 @@ class GeographyTest(TestCase):
+         from django.contrib.gis.utils import LayerMapping
+ 
+         # Getting the shapefile and mapping dictionary.
+-        shp_path = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'data'))
++        shp_path = os.path.realpath(os.path.join(os.path.dirname(upath(__file__)), '..', 'data'))
+         co_shp = os.path.join(shp_path, 'counties', 'counties.shp')
+         co_mapping = {'name' : 'Name',
+                       'state' : 'State',
+diff --git a/django/contrib/gis/tests/layermap/tests.py b/django/contrib/gis/tests/layermap/tests.py
+index a976954..470e5be 100644
+--- a/django/contrib/gis/tests/layermap/tests.py
++++ b/django/contrib/gis/tests/layermap/tests.py
+@@ -13,13 +13,14 @@ from django.db import router
+ from django.conf import settings
+ from django.test import TestCase
+ from django.utils import unittest
++from django.utils._os import upath
+ 
+ from .models import (
+     City, County, CountyFeat, Interstate, ICity1, ICity2, Invalid, State,
+     city_mapping, co_mapping, cofeat_mapping, inter_mapping)
+ 
+ 
+-shp_path = os.path.realpath(os.path.join(os.path.dirname(__file__), os.pardir, 'data'))
++shp_path = os.path.realpath(os.path.join(os.path.dirname(upath(__file__)), os.pardir, 'data'))
+ city_shp = os.path.join(shp_path, 'cities', 'cities.shp')
+ co_shp = os.path.join(shp_path, 'counties', 'counties.shp')
+ inter_shp = os.path.join(shp_path, 'interstates', 'interstates.shp')
+diff --git a/django/contrib/sitemaps/tests/http.py b/django/contrib/sitemaps/tests/http.py
+index 99042fe..4a1cf66 100644
+--- a/django/contrib/sitemaps/tests/http.py
++++ b/django/contrib/sitemaps/tests/http.py
+@@ -11,6 +11,7 @@ from django.core.exceptions import ImproperlyConfigured
+ from django.test.utils import override_settings
+ from django.utils.unittest import skipUnless
+ from django.utils.formats import localize
++from django.utils._os import upath
+ from django.utils.translation import activate, deactivate
+ 
+ from .base import SitemapTestsBase
+@@ -29,7 +30,7 @@ class HTTPSitemapTests(SitemapTestsBase):
+         self.assertXMLEqual(response.content.decode('utf-8'), expected_content)
+ 
+     @override_settings(
+-        TEMPLATE_DIRS=(os.path.join(os.path.dirname(__file__), 'templates'),)
++        TEMPLATE_DIRS=(os.path.join(os.path.dirname(upath(__file__)), 'templates'),)
+     )
+     def test_simple_sitemap_custom_index(self):
+         "A simple sitemap index can be rendered with a custom template"
+@@ -64,7 +65,7 @@ class HTTPSitemapTests(SitemapTestsBase):
+         self.assertXMLEqual(response.content.decode('utf-8'), expected_content)
+ 
+     @override_settings(
+-        TEMPLATE_DIRS=(os.path.join(os.path.dirname(__file__), 'templates'),)
++        TEMPLATE_DIRS=(os.path.join(os.path.dirname(upath(__file__)), 'templates'),)
+     )
+     def test_simple_custom_sitemap(self):
+         "A simple sitemap can be rendered with a custom template"
+diff --git a/django/contrib/staticfiles/storage.py b/django/contrib/staticfiles/storage.py
+index 9691b78..7e87a89 100644
+--- a/django/contrib/staticfiles/storage.py
++++ b/django/contrib/staticfiles/storage.py
+@@ -19,6 +19,7 @@ from django.utils.datastructures import SortedDict
+ from django.utils.encoding import force_bytes, force_text
+ from django.utils.functional import LazyObject
+ from django.utils.importlib import import_module
++from django.utils._os import upath
+ 
+ from django.contrib.staticfiles.utils import check_settings, matches_patterns
+ 
+@@ -296,7 +297,7 @@ class AppStaticStorage(FileSystemStorage):
+         """
+         # app is the actual app module
+         mod = import_module(app)
+-        mod_path = os.path.dirname(mod.__file__)
++        mod_path = os.path.dirname(upath(mod.__file__))
+         location = os.path.join(mod_path, self.source_dir)
+         super(AppStaticStorage, self).__init__(location, *args, **kwargs)
+ 
+diff --git a/django/core/management/__init__.py b/django/core/management/__init__.py
+index bb26c20..fab5059 100644
+--- a/django/core/management/__init__.py
++++ b/django/core/management/__init__.py
+@@ -9,6 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
+ from django.core.management.base import BaseCommand, CommandError, handle_default_options
+ from django.core.management.color import color_style
+ from django.utils.importlib import import_module
++from django.utils._os import upath
+ from django.utils import six
+ 
+ # For backwards compatibility: get_version() used to be in this module.
+@@ -410,10 +411,10 @@ def setup_environ(settings_mod, original_settings_path=None):
+     # Add this project to sys.path so that it's importable in the conventional
+     # way. For example, if this file (manage.py) lives in a directory
+     # "myproject", this code would add "/path/to/myproject" to sys.path.
+-    if '__init__.py' in settings_mod.__file__:
+-        p = os.path.dirname(settings_mod.__file__)
++    if '__init__.py' in upath(settings_mod.__file__):
++        p = os.path.dirname(upath(settings_mod.__file__))
+     else:
+-        p = settings_mod.__file__
++        p = upath(settings_mod.__file__)
+     project_directory, settings_filename = os.path.split(p)
+     if project_directory == os.curdir or not project_directory:
+         project_directory = os.getcwd()
+diff --git a/django/core/management/commands/compilemessages.py b/django/core/management/commands/compilemessages.py
+index b7392b9..e1d8a33 100644
+--- a/django/core/management/commands/compilemessages.py
++++ b/django/core/management/commands/compilemessages.py
+@@ -5,6 +5,7 @@ import os
+ import sys
+ from optparse import make_option
+ from django.core.management.base import BaseCommand, CommandError
++from django.utils._os import npath
+ 
+ def has_bom(fn):
+     with open(fn, 'rb') as f:
+@@ -41,8 +42,8 @@ def compile_messages(stderr, locale=None):
+                     # command, so that we can take advantage of shell quoting, to
+                     # quote any malicious characters/escaping.
+                     # See http://cyberelk.net/tim/articles/cmdline/ar01s02.html
+-                    os.environ['djangocompilemo'] = pf + '.mo'
+-                    os.environ['djangocompilepo'] = pf + '.po'
++                    os.environ['djangocompilemo'] = npath(pf + '.mo')
++                    os.environ['djangocompilepo'] = npath(pf + '.po')
+                     if sys.platform == 'win32': # Different shell-variable syntax
+                         cmd = 'msgfmt --check-format -o "%djangocompilemo%" "%djangocompilepo%"'
+                     else:
+diff --git a/django/core/management/commands/loaddata.py b/django/core/management/commands/loaddata.py
+index f6f1b10..ed47b8f 100644
+--- a/django/core/management/commands/loaddata.py
++++ b/django/core/management/commands/loaddata.py
+@@ -13,6 +13,7 @@ from django.db import (connections, router, transaction, DEFAULT_DB_ALIAS,
+       IntegrityError, DatabaseError)
+ from django.db.models import get_apps
+ from django.utils.encoding import force_text
++from django.utils._os import upath
+ from itertools import product
+ 
+ try:
+@@ -97,10 +98,10 @@ class Command(BaseCommand):
+             if hasattr(app, '__path__'):
+                 # It's a 'models/' subpackage
+                 for path in app.__path__:
+-                    app_module_paths.append(path)
++                    app_module_paths.append(upath(path))
+             else:
+                 # It's a models.py module
+-                app_module_paths.append(app.__file__)
++                app_module_paths.append(upath(app.__file__))
+ 
+         app_fixtures = [os.path.join(os.path.dirname(path), 'fixtures') for path in app_module_paths]
+ 
+diff --git a/django/core/management/commands/makemessages.py b/django/core/management/commands/makemessages.py
+index 81c4fdf..606cbe0 100644
+--- a/django/core/management/commands/makemessages.py
++++ b/django/core/management/commands/makemessages.py
+@@ -301,7 +301,7 @@ def make_messages(locale=None, domain='django', verbosity=1, all=False,
+ 
+     locales = []
+     if locale is not None:
+-        locales.append(locale)
++        locales.append(str(locale))
+     elif all:
+         locale_dirs = filter(os.path.isdir, glob.glob('%s/*' % localedir))
+         locales = [os.path.basename(l) for l in locale_dirs]
+@@ -316,8 +316,8 @@ def make_messages(locale=None, domain='django', verbosity=1, all=False,
+         if not os.path.isdir(basedir):
+             os.makedirs(basedir)
+ 
+-        pofile = os.path.join(basedir, '%s.po' % domain)
+-        potfile = os.path.join(basedir, '%s.pot' % domain)
++        pofile = os.path.join(basedir, '%s.po' % str(domain))
++        potfile = os.path.join(basedir, '%s.pot' % str(domain))
+ 
+         if os.path.exists(potfile):
+             os.unlink(potfile)
+diff --git a/django/core/management/sql.py b/django/core/management/sql.py
+index ea03e90..e46f4ae 100644
+--- a/django/core/management/sql.py
++++ b/django/core/management/sql.py
+@@ -8,6 +8,7 @@ from django.conf import settings
+ from django.core.management.base import CommandError
+ from django.db import models
+ from django.db.models import get_models
++from django.utils._os import upath
+ 
+ 
+ def sql_create(app, style, connection):
+@@ -159,7 +160,7 @@ def _split_statements(content):
+ 
+ def custom_sql_for_model(model, style, connection):
+     opts = model._meta
+-    app_dir = os.path.normpath(os.path.join(os.path.dirname(models.get_app(model._meta.app_label).__file__), 'sql'))
++    app_dir = os.path.normpath(os.path.join(os.path.dirname(upath(models.get_app(model._meta.app_label).__file__)), 'sql'))
+     output = []
+ 
+     # Post-creation SQL should come before any initial SQL data is loaded.
+diff --git a/django/core/urlresolvers.py b/django/core/urlresolvers.py
+index 9c0b7b7..c657fd9 100644
+--- a/django/core/urlresolvers.py
++++ b/django/core/urlresolvers.py
+@@ -251,9 +251,9 @@ class RegexURLResolver(LocaleRegexProvider):
+             urlconf_repr = '<%s list>' % self.urlconf_name[0].__class__.__name__
+         else:
+             urlconf_repr = repr(self.urlconf_name)
+-        return force_str('<%s %s (%s:%s) %s>' % (
++        return str('<%s %s (%s:%s) %s>') % (
+             self.__class__.__name__, urlconf_repr, self.app_name,
+-            self.namespace, self.regex.pattern))
++            self.namespace, self.regex.pattern)
+ 
+     def _populate(self):
+         lookups = MultiValueDict()
+diff --git a/django/db/models/loading.py b/django/db/models/loading.py
+index a0510ac..56edc36 100644
+--- a/django/db/models/loading.py
++++ b/django/db/models/loading.py
+@@ -5,6 +5,7 @@ from django.core.exceptions import ImproperlyConfigured
+ from django.utils.datastructures import SortedDict
+ from django.utils.importlib import import_module
+ from django.utils.module_loading import module_has_submodule
++from django.utils._os import upath
+ from django.utils import six
+ 
+ import imp
+@@ -244,8 +245,8 @@ class AppCache(object):
+                 # The same model may be imported via different paths (e.g.
+                 # appname.models and project.appname.models). We use the source
+                 # filename as a means to detect identity.
+-                fname1 = os.path.abspath(sys.modules[model.__module__].__file__)
+-                fname2 = os.path.abspath(sys.modules[model_dict[model_name].__module__].__file__)
++                fname1 = os.path.abspath(upath(sys.modules[model.__module__].__file__))
++                fname2 = os.path.abspath(upath(sys.modules[model_dict[model_name].__module__].__file__))
+                 # Since the filename extension could be .py the first time and
+                 # .pyc or .pyo the second time, ignore the extension when
+                 # comparing.
+diff --git a/django/db/utils.py b/django/db/utils.py
+index a912986..842fd35 100644
+--- a/django/db/utils.py
++++ b/django/db/utils.py
+@@ -5,6 +5,7 @@ from threading import local
+ from django.conf import settings
+ from django.core.exceptions import ImproperlyConfigured
+ from django.utils.importlib import import_module
++from django.utils._os import upath
+ from django.utils import six
+ 
+ 
+@@ -27,7 +28,7 @@ def load_backend(backend_name):
+     except ImportError as e_user:
+         # The database backend wasn't found. Display a helpful error message
+         # listing all possible (built-in) database backends.
+-        backend_dir = os.path.join(os.path.dirname(__file__), 'backends')
++        backend_dir = os.path.join(os.path.dirname(upath(__file__)), 'backends')
+         try:
+             builtin_backends = [
+                 name for _, name, ispkg in pkgutil.iter_modules([backend_dir])
+diff --git a/django/utils/_os.py b/django/utils/_os.py
+index 1ea12ae..6c1cd17 100644
+--- a/django/utils/_os.py
++++ b/django/utils/_os.py
+@@ -1,6 +1,8 @@
+ import os
+ import stat
++import sys
+ from os.path import join, normcase, normpath, abspath, isabs, sep, dirname
++
+ from django.utils.encoding import force_text
+ from django.utils import six
+ 
+@@ -10,6 +12,9 @@ except NameError:
+     class WindowsError(Exception):
+         pass
+ 
++if not six.PY3:
++    fs_encoding = sys.getfilesystemencoding() or sys.getdefaultencoding()
++
+ 
+ # Under Python 2, define our own abspath function that can handle joining
+ # unicode paths to a current working directory that has non-ASCII characters
+@@ -29,6 +34,23 @@ else:
+             path = join(os.getcwdu(), path)
+         return normpath(path)
+ 
++def upath(path):
++    """
++    Always return a unicode path.
++    """
++    if not six.PY3:
++        return path.decode(fs_encoding)
++    return path
++
++def npath(path):
++    """
++    Always return a native path, that is unicode on Python 3 and bytestring on
++    Python 2.
++    """
++    if not six.PY3 and not isinstance(path, bytes):                                ###################isinstance
++        return path.encode(fs_encoding)
++    return path
++
+ def safe_join(base, *paths):
+     """
+     Joins one or more path components to the base path component intelligently.
+@@ -74,4 +96,3 @@ def rmtree_errorhandler(func, path, exc_info):
+     os.chmod(path, stat.S_IWRITE)
+     # use the original function to repeat the operation
+     func(path)
+-
+diff --git a/django/utils/translation/trans_real.py b/django/utils/translation/trans_real.py
+index 1bcef2d..cf6270c 100644
+--- a/django/utils/translation/trans_real.py
++++ b/django/utils/translation/trans_real.py
+@@ -10,6 +10,7 @@ from threading import local
+ 
+ from django.utils.importlib import import_module
+ from django.utils.encoding import force_str, force_text
++from django.utils._os import upath
+ from django.utils.safestring import mark_safe, SafeData
+ from django.utils import six
+ from django.utils.six import StringIO
+@@ -109,7 +110,7 @@ def translation(language):
+ 
+     from django.conf import settings
+ 
+-    globalpath = os.path.join(os.path.dirname(sys.modules[settings.__module__].__file__), 'locale')
++    globalpath = os.path.join(os.path.dirname(upath(sys.modules[settings.__module__].__file__)), 'locale')
+ 
+     def _fetch(lang, fallback=None):
+ 
+@@ -151,7 +152,7 @@ def translation(language):
+ 
+         for appname in reversed(settings.INSTALLED_APPS):
+             app = import_module(appname)
+-            apppath = os.path.join(os.path.dirname(app.__file__), 'locale')
++            apppath = os.path.join(os.path.dirname(upath(app.__file__)), 'locale')
+ 
+             if os.path.isdir(apppath):
+                 res = _merge(apppath)
+@@ -337,7 +338,7 @@ def all_locale_paths():
+     """
+     from django.conf import settings
+     globalpath = os.path.join(
+-        os.path.dirname(sys.modules[settings.__module__].__file__), 'locale')
++        os.path.dirname(upath(sys.modules[settings.__module__].__file__)), 'locale')
+     return [globalpath] + list(settings.LOCALE_PATHS)
+ 
+ def check_for_language(lang_code):
+diff --git a/django/views/i18n.py b/django/views/i18n.py
+index 96643f0..c1d456d 100644
+--- a/django/views/i18n.py
++++ b/django/views/i18n.py
+@@ -8,6 +8,7 @@ from django.utils.translation import check_for_language, activate, to_locale, ge
+ from django.utils.text import javascript_quote
+ from django.utils.encoding import smart_text
+ from django.utils.formats import get_format_modules, get_format
++from django.utils._os import upath
+ from django.utils import six
+ 
+ def set_language(request):
+@@ -197,7 +198,7 @@ def javascript_catalog(request, domain='djangojs', packages=None):
+     # paths of requested packages
+     for package in packages:
+         p = importlib.import_module(package)
+-        path = os.path.join(os.path.dirname(p.__file__), 'locale')
++        path = os.path.join(os.path.dirname(upath(p.__file__)), 'locale')
+         paths.append(path)
+     # add the filesystem paths listed in the LOCALE_PATHS setting
+     paths.extend(list(reversed(settings.LOCALE_PATHS)))
+diff --git a/tests/modeltests/fixtures/tests.py b/tests/modeltests/fixtures/tests.py
+index f9b0ac8..b667c8c 100644
+--- a/tests/modeltests/fixtures/tests.py
++++ b/tests/modeltests/fixtures/tests.py
+@@ -226,9 +226,9 @@ class FixtureLoadingTests(TestCase):
+ 
+     def test_ambiguous_compressed_fixture(self):
+         # The name "fixture5" is ambigous, so loading it will raise an error
+-        with six.assertRaisesRegex(self, management.CommandError,
+-                "Multiple fixtures named 'fixture5'"):
++        with self.assertRaises(management.CommandError) as cm:
+             management.call_command('loaddata', 'fixture5', verbosity=0, commit=False)
++            self.assertIn("Multiple fixtures named 'fixture5'", cm.exception.args[0])
+ 
+     def test_db_loading(self):
+         # Load db fixtures 1 and 2. These will load using the 'default' database identifier implicitly
+@@ -250,9 +250,9 @@ class FixtureLoadingTests(TestCase):
+         # is closed at the end of each test.
+         if connection.vendor == 'mysql':
+             connection.cursor().execute("SET sql_mode = 'TRADITIONAL'")
+-        with six.assertRaisesRegex(self, IntegrityError,
+-                "Could not load fixtures.Article\(pk=1\): .*$"):
++        with self.assertRaises(IntegrityError) as cm:
+             management.call_command('loaddata', 'invalid.json', verbosity=0, commit=False)
++            self.assertIn("Could not load fixtures.Article(pk=1):", cm.exception.args[0])
+ 
+     def test_loading_using(self):
+         # Load db fixtures 1 and 2. These will load using the 'default' database identifier explicitly
+@@ -308,9 +308,9 @@ class FixtureTransactionTests(TransactionTestCase):
+ 
+         # Try to load fixture 2 using format discovery; this will fail
+         # because there are two fixture2's in the fixtures directory
+-        with six.assertRaisesRegex(self, management.CommandError,
+-                "Multiple fixtures named 'fixture2'"):
++        with self.assertRaises(management.CommandError) as cm:
+             management.call_command('loaddata', 'fixture2', verbosity=0)
++            self.assertIn("Multiple fixtures named 'fixture2'", cm.exception.args[0])
+ 
+         # object list is unaffected
+         self.assertQuerysetEqual(Article.objects.all(), [
+diff --git a/tests/modeltests/model_forms/tests.py b/tests/modeltests/model_forms/tests.py
+index c47de45..c008c00 100644
+--- a/tests/modeltests/model_forms/tests.py
++++ b/tests/modeltests/model_forms/tests.py
+@@ -10,6 +10,7 @@ from django.core.validators import ValidationError
+ from django.db import connection
+ from django.db.models.query import EmptyQuerySet
+ from django.forms.models import model_to_dict
++from django.utils._os import upath
+ from django.utils.unittest import skipUnless
+ from django.test import TestCase
+ from django.utils import six
+@@ -1282,9 +1283,9 @@ class OldFormForXTests(TestCase):
+         # it comes to validation. This specifically tests that #6302 is fixed for
+         # both file fields and image fields.
+ 
+-        with open(os.path.join(os.path.dirname(__file__), "test.png"), 'rb') as fp:
++        with open(os.path.join(os.path.dirname(upath(__file__)), "test.png"), 'rb') as fp:
+             image_data = fp.read()
+-        with open(os.path.join(os.path.dirname(__file__), "test2.png"), 'rb') as fp:
++        with open(os.path.join(os.path.dirname(upath(__file__)), "test2.png"), 'rb') as fp:
+             image_data2 = fp.read()
+ 
+         f = ImageFileForm(
+diff --git a/tests/modeltests/proxy_model_inheritance/tests.py b/tests/modeltests/proxy_model_inheritance/tests.py
+index 39fee7e..239bc67 100644
+--- a/tests/modeltests/proxy_model_inheritance/tests.py
++++ b/tests/modeltests/proxy_model_inheritance/tests.py
+@@ -8,6 +8,7 @@ from django.core.management import call_command
+ from django.db.models.loading import cache, load_app
+ from django.test import TestCase, TransactionTestCase
+ from django.test.utils import override_settings
++from django.utils._os import upath
+ 
+ from .models import (ConcreteModel, ConcreteModelSubclass,
+     ConcreteModelSubclassProxy)
+@@ -23,7 +24,7 @@ class ProxyModelInheritanceTests(TransactionTestCase):
+ 
+     def setUp(self):
+         self.old_sys_path = sys.path[:]
+-        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
++        sys.path.append(os.path.dirname(os.path.abspath(upath(__file__))))
+         for app in settings.INSTALLED_APPS:
+             load_app(app)
+ 
+diff --git a/tests/regressiontests/admin_scripts/tests.py b/tests/regressiontests/admin_scripts/tests.py
+index a26d7a6..d0ca9d2 100644
+--- a/tests/regressiontests/admin_scripts/tests.py
++++ b/tests/regressiontests/admin_scripts/tests.py
+@@ -19,13 +19,15 @@ from django.conf import settings
+ from django.db import connection
+ from django.test.simple import DjangoTestSuiteRunner
+ from django.utils import unittest
++from django.utils.encoding import force_str, force_text
++from django.utils._os import upath
+ from django.test import LiveServerTestCase
+ 
+-test_dir = os.path.dirname(os.path.dirname(__file__))
++test_dir = os.path.dirname(os.path.dirname(upath(__file__)))
+ 
+ class AdminScriptTestCase(unittest.TestCase):
+     def write_settings(self, filename, apps=None, is_dir=False, sdict=None):
+-        test_dir = os.path.dirname(os.path.dirname(__file__))
++        test_dir = os.path.dirname(os.path.dirname(upath(__file__)))
+         if is_dir:
+             settings_dir = os.path.join(test_dir, filename)
+             os.mkdir(settings_dir)
+@@ -94,6 +96,7 @@ class AdminScriptTestCase(unittest.TestCase):
+         return paths
+ 
+     def run_test(self, script, args, settings_file=None, apps=None):
++        test_dir = os.path.dirname(os.path.dirname(__file__))
+         project_dir = os.path.dirname(test_dir)
+         base_dir = os.path.dirname(project_dir)
+         ext_backend_base_dirs = self._ext_backend_paths()
+@@ -134,7 +137,7 @@ class AdminScriptTestCase(unittest.TestCase):
+         return out, err
+ 
+     def run_django_admin(self, args, settings_file=None):
+-        bin_dir = os.path.abspath(os.path.dirname(bin.__file__))
++        bin_dir = os.path.abspath(os.path.dirname(upath(bin.__file__)))
+         return self.run_test(os.path.join(bin_dir, 'django-admin.py'), args, settings_file)
+ 
+     def run_manage(self, args, settings_file=None):
+@@ -144,7 +147,7 @@ class AdminScriptTestCase(unittest.TestCase):
+             except OSError:
+                 pass
+ 
+-        conf_dir = os.path.dirname(conf.__file__)
++        conf_dir = os.path.dirname(upath(conf.__file__))
+         template_manage_py = os.path.join(conf_dir, 'project_template', 'manage.py')
+ 
+         test_manage_py = os.path.join(test_dir, 'manage.py')
+@@ -166,10 +169,12 @@ class AdminScriptTestCase(unittest.TestCase):
+ 
+     def assertOutput(self, stream, msg):
+         "Utility assertion: assert that the given message exists in the output"
++        stream = force_text(stream)
+         self.assertTrue(msg in stream, "'%s' does not match actual output text '%s'" % (msg, stream))
+ 
+     def assertNotInOutput(self, stream, msg):
+         "Utility assertion: assert that the given message doesn't exist in the output"
++        stream = force_text(stream)
+         self.assertFalse(msg in stream, "'%s' matches actual output text '%s'" % (msg, stream))
+ 
+ ##########################################################################
+@@ -1553,7 +1558,7 @@ class StartProject(LiveServerTestCase, AdminScriptTestCase):
+         self.assertNoOutput(err)
+         test_manage_py = os.path.join(testproject_dir, 'manage.py')
+         with open(test_manage_py, 'r') as fp:
+-            content = fp.read()
++            content = force_text(fp.read())
+             self.assertIn("project_name = 'another_project'", content)
+             self.assertIn("project_directory = '%s'" % testproject_dir, content)
+ 
+diff --git a/tests/regressiontests/admin_scripts/urls.py b/tests/regressiontests/admin_scripts/urls.py
+index 692638c..a45dc3e 100644
+--- a/tests/regressiontests/admin_scripts/urls.py
++++ b/tests/regressiontests/admin_scripts/urls.py
+@@ -1,7 +1,8 @@
+ import os
+ from django.conf.urls import patterns
++from django.utils._os import upath
+ 
+-here = os.path.dirname(__file__)
++here = os.path.dirname(upath(__file__))
+ 
+ urlpatterns = patterns('',
+     (r'^custom_templates/(?P<path>.*)$', 'django.views.static.serve', {
+diff --git a/tests/regressiontests/admin_views/tests.py b/tests/regressiontests/admin_views/tests.py
+index 10f9461..04394a6 100644
+--- a/tests/regressiontests/admin_views/tests.py
++++ b/tests/regressiontests/admin_views/tests.py
+@@ -33,6 +33,7 @@ from django.utils.cache import get_max_age
+ from django.utils.encoding import iri_to_uri, force_bytes
+ from django.utils.html import escape
+ from django.utils.http import urlencode
++from django.utils._os import upath
+ from django.utils import six
+ from django.test.utils import override_settings
+ 
+@@ -633,7 +634,7 @@ class AdminViewFormUrlTest(TestCase):
+         Refs #17515.
+         """
+         template_dirs = settings.TEMPLATE_DIRS + (
+-            os.path.join(os.path.dirname(__file__), 'templates'),)
++            os.path.join(os.path.dirname(upath(__file__)), 'templates'),)
+         with self.settings(TEMPLATE_DIRS=template_dirs):
+             response = self.client.get("/test_admin/admin/admin_views/color2/")
+             self.assertTrue('custom_filter_template.html' in [t.name for t in response.templates])
+diff --git a/tests/regressiontests/app_loading/tests.py b/tests/regressiontests/app_loading/tests.py
+index 0e66a5a..6dd0be2 100644
+--- a/tests/regressiontests/app_loading/tests.py
++++ b/tests/regressiontests/app_loading/tests.py
+@@ -7,13 +7,14 @@ import time
+ 
+ from django.conf import Settings
+ from django.db.models.loading import cache, load_app, get_model, get_models
++from django.utils._os import upath
+ from django.utils.unittest import TestCase
+ 
+ class EggLoadingTest(TestCase):
+ 
+     def setUp(self):
+         self.old_path = sys.path[:]
+-        self.egg_dir = '%s/eggs' % os.path.dirname(__file__)
++        self.egg_dir = '%s/eggs' % os.path.dirname(upath(__file__))
+ 
+         # This test adds dummy applications to the app cache. These
+         # need to be removed in order to prevent bad interactions
+diff --git a/tests/regressiontests/bug639/tests.py b/tests/regressiontests/bug639/tests.py
+index b754769..fcc1e0f 100644
+--- a/tests/regressiontests/bug639/tests.py
++++ b/tests/regressiontests/bug639/tests.py
+@@ -11,6 +11,7 @@ import shutil
+ 
+ from django.core.files.uploadedfile import SimpleUploadedFile
+ from django.utils import unittest
++from django.utils._os import upath
+ 
+ from .models import Photo, PhotoForm, temp_storage_dir
+ 
+@@ -23,7 +24,7 @@ class Bug639Test(unittest.TestCase):
+         called.
+         """
+         # Grab an image for testing.
+-        filename = os.path.join(os.path.dirname(__file__), "test.jpg")
++        filename = os.path.join(os.path.dirname(upath(__file__)), "test.jpg")
+         with open(filename, "rb") as fp:
+             img = fp.read()
+ 
+diff --git a/tests/regressiontests/file_storage/tests.py b/tests/regressiontests/file_storage/tests.py
+index 45c18ba..b6d3e1f 100644
+--- a/tests/regressiontests/file_storage/tests.py
++++ b/tests/regressiontests/file_storage/tests.py
+@@ -24,6 +24,7 @@ from django.core.files.uploadedfile import UploadedFile
+ from django.test import SimpleTestCase
+ from django.utils import six
+ from django.utils import unittest
++from django.utils._os import upath
+ from django.test.utils import override_settings
+ from ..servers.tests import LiveServerBase
+ 
+@@ -104,7 +105,7 @@ class FileStorageTests(unittest.TestCase):
+         """
+         storage = self.storage_class(location='')
+         self.assertEqual(storage.base_location, '')
+-        self.assertEqual(storage.location, os.getcwd())
++        self.assertEqual(storage.location, upath(os.getcwd()))
+ 
+     def test_file_access_options(self):
+         """
+@@ -534,7 +535,7 @@ class DimensionClosingBug(unittest.TestCase):
+         from django.core.files import images
+         images.open = catching_open
+         try:
+-            get_image_dimensions(os.path.join(os.path.dirname(__file__), "test1.png"))
++            get_image_dimensions(os.path.join(os.path.dirname(upath(__file__)), "test1.png"))
+         finally:
+             del images.open
+         self.assertTrue(FileWrapper._closed)
+@@ -551,7 +552,7 @@ class InconsistentGetImageDimensionsBug(unittest.TestCase):
+         """
+         from django.core.files.images import ImageFile
+ 
+-        img_path = os.path.join(os.path.dirname(__file__), "test.png")
++        img_path = os.path.join(os.path.dirname(upath(__file__)), "test.png")
+         image = ImageFile(open(img_path, 'rb'))
+         image_pil = Image.open(img_path)
+         size_1, size_2 = get_image_dimensions(image), get_image_dimensions(image)
+diff --git a/tests/regressiontests/fixtures_regress/tests.py b/tests/regressiontests/fixtures_regress/tests.py
+index 55363bc..988c5ac 100644
+--- a/tests/regressiontests/fixtures_regress/tests.py
++++ b/tests/regressiontests/fixtures_regress/tests.py
+@@ -14,6 +14,8 @@ from django.db.models import signals
+ from django.test import (TestCase, TransactionTestCase, skipIfDBFeature,
+     skipUnlessDBFeature)
+ from django.test.utils import override_settings
++from django.utils.encoding import force_text
++from django.utils._os import upath
+ from django.utils import six
+ from django.utils.six import PY3, StringIO
+ 
+@@ -126,7 +128,7 @@ class TestFixtures(TestCase):
+         fixture directory.
+         """
+         load_absolute_path = os.path.join(
+-            os.path.dirname(__file__),
++            os.path.dirname(upath(__file__)),
+             'fixtures',
+             'absolute.json'
+         )
+@@ -388,7 +390,7 @@ class TestFixtures(TestCase):
+                 commit=False,
+             )
+ 
+-    _cur_dir = os.path.dirname(os.path.abspath(__file__))
++    _cur_dir = os.path.dirname(os.path.abspath(upath(__file__)))
+ 
+     @override_settings(FIXTURE_DIRS=[os.path.join(_cur_dir, 'fixtures_1'),
+                                      os.path.join(_cur_dir, 'fixtures_2')])
+@@ -430,7 +432,7 @@ class TestFixtures(TestCase):
+             stdout=stdout_output,
+         )
+         self.assertTrue("No xml fixture 'this_fixture_doesnt_exist' in" in
+-            stdout_output.getvalue())
++            force_text(stdout_output.getvalue()))
+ 
+ 
+ class NaturalKeyFixtureTests(TestCase):
+diff --git a/tests/regressiontests/forms/tests/fields.py b/tests/regressiontests/forms/tests/fields.py
+index 1027afc..e17d976 100644
+--- a/tests/regressiontests/forms/tests/fields.py
++++ b/tests/regressiontests/forms/tests/fields.py
+@@ -36,6 +36,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
+ from django.forms import *
+ from django.test import SimpleTestCase
+ from django.utils import six
++from django.utils._os import upath
+ 
+ 
+ def fix_os_paths(x):
+@@ -928,12 +929,12 @@ class FieldsTests(SimpleTestCase):
+     # FilePathField ###############################################################
+ 
+     def test_filepathfield_1(self):
+-        path = os.path.abspath(forms.__file__)
++        path = os.path.abspath(upath(forms.__file__))
+         path = os.path.dirname(path) + '/'
+         self.assertTrue(fix_os_paths(path).endswith('/django/forms/'))
+ 
+     def test_filepathfield_2(self):
+-        path = forms.__file__
++        path = upath(forms.__file__)
+         path = os.path.dirname(os.path.abspath(path)) + '/'
+         f = FilePathField(path=path)
+         f.choices = [p for p in f.choices if p[0].endswith('.py')]
+@@ -954,7 +955,7 @@ class FieldsTests(SimpleTestCase):
+         assert fix_os_paths(f.clean(path + 'fields.py')).endswith('/django/forms/fields.py')
+ 
+     def test_filepathfield_3(self):
+-        path = forms.__file__
++        path = upath(forms.__file__)
+         path = os.path.dirname(os.path.abspath(path)) + '/'
+         f = FilePathField(path=path, match='^.*?\.py$')
+         f.choices.sort()
+@@ -972,7 +973,7 @@ class FieldsTests(SimpleTestCase):
+             self.assertTrue(got[0].endswith(exp[0]))
+ 
+     def test_filepathfield_4(self):
+-        path = os.path.abspath(forms.__file__)
++        path = os.path.abspath(upath(forms.__file__))
+         path = os.path.dirname(path) + '/'
+         f = FilePathField(path=path, recursive=True, match='^.*?\.py$')
+         f.choices.sort()
+@@ -992,7 +993,7 @@ class FieldsTests(SimpleTestCase):
+             self.assertTrue(got[0].endswith(exp[0]))
+ 
+     def test_filepathfield_folders(self):
+-        path = os.path.dirname(__file__) + '/filepath_test_files/'
++        path = os.path.dirname(upath(__file__)) + '/filepath_test_files/'
+         f = FilePathField(path=path, allow_folders=True, allow_files=False)
+         f.choices.sort()
+         expected = [
+diff --git a/tests/regressiontests/httpwrappers/tests.py b/tests/regressiontests/httpwrappers/tests.py
+index 2d172ad..a601e54 100644
+--- a/tests/regressiontests/httpwrappers/tests.py
++++ b/tests/regressiontests/httpwrappers/tests.py
+@@ -14,6 +14,7 @@ from django.http import (QueryDict, HttpResponse, HttpResponseRedirect,
+                          parse_cookie)
+ from django.test import TestCase
+ from django.utils.encoding import smart_str
++from django.utils._os import upath
+ from django.utils import six
+ from django.utils import unittest
+ 
+@@ -483,7 +484,7 @@ class StreamingHttpResponseTests(TestCase):
+ 
+ class FileCloseTests(TestCase):
+     def test_response(self):
+-        filename = os.path.join(os.path.dirname(__file__), 'abc.txt')
++        filename = os.path.join(os.path.dirname(upath(__file__)), 'abc.txt')
+ 
+         # file isn't closed until we close the response.
+         file1 = open(filename)
+@@ -516,7 +517,7 @@ class FileCloseTests(TestCase):
+         self.assertTrue(file2.closed)
+ 
+     def test_streaming_response(self):
+-        filename = os.path.join(os.path.dirname(__file__), 'abc.txt')
++        filename = os.path.join(os.path.dirname(upath(__file__)), 'abc.txt')
+ 
+         # file isn't closed until we close the response.
+         file1 = open(filename)
+diff --git a/tests/regressiontests/i18n/commands/compilation.py b/tests/regressiontests/i18n/commands/compilation.py
+index c6ab7794..2944469 100644
+--- a/tests/regressiontests/i18n/commands/compilation.py
++++ b/tests/regressiontests/i18n/commands/compilation.py
+@@ -4,9 +4,10 @@ from django.core.management import call_command, CommandError
+ from django.test import TestCase
+ from django.test.utils import override_settings
+ from django.utils import translation, six
++from django.utils._os import upath
+ from django.utils.six import StringIO
+ 
+-test_dir = os.path.abspath(os.path.dirname(__file__))
++test_dir = os.path.abspath(os.path.dirname(upath(__file__)))
+ 
+ 
+ class MessageCompilationTests(TestCase):
+@@ -25,9 +26,9 @@ class PoFileTests(MessageCompilationTests):
+ 
+     def test_bom_rejection(self):
+         os.chdir(test_dir)
+-        with six.assertRaisesRegex(self, CommandError,
+-                "file has a BOM \(Byte Order Mark\)"):
++        with self.assertRaises(CommandError) as cm:
+             call_command('compilemessages', locale=self.LOCALE, stderr=StringIO())
++        self.assertIn("file has a BOM (Byte Order Mark)", cm.exception.args[0])
+         self.assertFalse(os.path.exists(self.MO_FILE))
+ 
+ 
+diff --git a/tests/regressiontests/i18n/commands/extraction.py b/tests/regressiontests/i18n/commands/extraction.py
+index ca2c3cc..aa5efe1 100644
+--- a/tests/regressiontests/i18n/commands/extraction.py
++++ b/tests/regressiontests/i18n/commands/extraction.py
+@@ -1,4 +1,5 @@
+ # -*- encoding: utf-8 -*-
++from __future__ import unicode_literals
+ 
+ import os
+ import re
+@@ -6,6 +7,8 @@ import shutil
+ 
+ from django.core import management
+ from django.test import TestCase
++from django.utils.encoding import force_text
++from django.utils._os import upath
+ from django.utils.six import StringIO
+ 
+ 
+@@ -17,7 +20,7 @@ class ExtractorTests(TestCase):
+ 
+     def setUp(self):
+         self._cwd = os.getcwd()
+-        self.test_dir = os.path.abspath(os.path.dirname(__file__))
++        self.test_dir = os.path.abspath(os.path.dirname(upath(__file__)))
+ 
+     def _rmrf(self, dname):
+         if os.path.commonprefix([self.test_dir, os.path.abspath(dname)]) != self.test_dir:
+@@ -55,7 +58,7 @@ class BasicExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertTrue('#. Translators: This comment should be extracted' in po_contents)
+             self.assertTrue('This comment should not be extracted' not in po_contents)
+             # Comments in templates
+@@ -83,7 +86,7 @@ class BasicExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertMsgId('Literal with a percent symbol at the end %%', po_contents)
+             self.assertMsgId('Literal with a percent %% symbol in the middle', po_contents)
+             self.assertMsgId('Completed 50%% of all the tasks', po_contents)
+@@ -99,7 +102,7 @@ class BasicExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertMsgId('I think that 100%% is more that 50%% of anything.', po_contents)
+             self.assertMsgId('I think that 100%% is more that 50%% of %(obj)s.', po_contents)
+             self.assertMsgId("Blocktrans extraction shouldn't double escape this: %%, a=%(a)s", po_contents)
+@@ -123,7 +126,7 @@ class BasicExtractorTests(ExtractorTests):
+         stdout = StringIO()
+         management.call_command('makemessages', locale=LOCALE, stdout=stdout)
+         os.remove('./code_sample.py')
+-        self.assertIn("code_sample.py:4", stdout.getvalue())
++        self.assertIn("code_sample.py:4", force_text(stdout.getvalue()))
+ 
+     def test_template_message_context_extractor(self):
+         """
+@@ -135,7 +138,7 @@ class BasicExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             # {% trans %}
+             self.assertTrue('msgctxt "Special trans context #1"' in po_contents)
+             self.assertTrue("Translatable literal #7a" in po_contents)
+@@ -161,7 +164,7 @@ class BasicExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             # {% trans %}
+             self.assertTrue('msgctxt "Context wrapped in double quotes"' in po_contents)
+             self.assertTrue('msgctxt "Context wrapped in single quotes"' in po_contents)
+@@ -216,7 +219,7 @@ class SymlinkExtractorTests(ExtractorTests):
+ 
+     def setUp(self):
+         self._cwd = os.getcwd()
+-        self.test_dir = os.path.abspath(os.path.dirname(__file__))
++        self.test_dir = os.path.abspath(os.path.dirname(upath(__file__)))
+         self.symlinked_dir = os.path.join(self.test_dir, 'templates_symlinked')
+ 
+     def tearDown(self):
+@@ -238,7 +241,7 @@ class SymlinkExtractorTests(ExtractorTests):
+             management.call_command('makemessages', locale=LOCALE, verbosity=0, symlinks=True)
+             self.assertTrue(os.path.exists(self.PO_FILE))
+             with open(self.PO_FILE, 'r') as fp:
+-                po_contents = fp.read()
++                po_contents = force_text(fp.read())
+                 self.assertMsgId('This literal should be included.', po_contents)
+                 self.assertTrue('templates_symlinked/test.html' in po_contents)
+ 
+@@ -250,7 +253,7 @@ class CopyPluralFormsExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertTrue('Plural-Forms: nplurals=2; plural=(n != 1)' in po_contents)
+ 
+ 
+@@ -261,7 +264,7 @@ class NoWrapExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0, no_wrap=True)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertMsgId('This literal should also be included wrapped or not wrapped depending on the use of the --no-wrap option.', po_contents)
+ 
+     def test_no_wrap_disabled(self):
+@@ -269,7 +272,7 @@ class NoWrapExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0, no_wrap=False)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertMsgId('""\n"This literal should also be included wrapped or not wrapped depending on the "\n"use of the --no-wrap option."', po_contents, use_quotes=False)
+ 
+ 
+@@ -280,7 +283,7 @@ class NoLocationExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0, no_location=True)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertFalse('#: templates/test.html:55' in po_contents)
+ 
+     def test_no_location_disabled(self):
+@@ -288,5 +291,5 @@ class NoLocationExtractorTests(ExtractorTests):
+         management.call_command('makemessages', locale=LOCALE, verbosity=0, no_location=False)
+         self.assertTrue(os.path.exists(self.PO_FILE))
+         with open(self.PO_FILE, 'r') as fp:
+-            po_contents = fp.read()
++            po_contents = force_text(fp.read())
+             self.assertTrue('#: templates/test.html:55' in po_contents)
+diff --git a/tests/regressiontests/i18n/contenttypes/tests.py b/tests/regressiontests/i18n/contenttypes/tests.py
+index 178232f..5e8a982 100644
+--- a/tests/regressiontests/i18n/contenttypes/tests.py
++++ b/tests/regressiontests/i18n/contenttypes/tests.py
+@@ -6,6 +6,7 @@ import os
+ from django.contrib.contenttypes.models import ContentType
+ from django.test import TestCase
+ from django.test.utils import override_settings
++from django.utils._os import upath
+ from django.utils import six
+ from django.utils import translation
+ 
+@@ -13,7 +14,7 @@ from django.utils import translation
+ @override_settings(
+     USE_I18N=True,
+     LOCALE_PATHS=(
+-        os.path.join(os.path.dirname(__file__), 'locale'),
++        os.path.join(os.path.dirname(upath(__file__)), 'locale'),
+     ),
+     LANGUAGE_CODE='en',
+     LANGUAGES=(
+diff --git a/tests/regressiontests/i18n/patterns/tests.py b/tests/regressiontests/i18n/patterns/tests.py
+index 73c9f56..358cdf6 100644
+--- a/tests/regressiontests/i18n/patterns/tests.py
++++ b/tests/regressiontests/i18n/patterns/tests.py
+@@ -7,16 +7,17 @@ from django.core.urlresolvers import reverse, clear_url_caches
+ from django.test import TestCase
+ from django.test.utils import override_settings
+ from django.template import Template, Context
++from django.utils._os import upath
+ from django.utils import translation
+ 
+ 
+ @override_settings(
+     USE_I18N=True,
+     LOCALE_PATHS=(
+-        os.path.join(os.path.dirname(__file__), 'locale'),
++        os.path.join(os.path.dirname(upath(__file__)), 'locale'),
+     ),
+     TEMPLATE_DIRS=(
+-        os.path.join(os.path.dirname(__file__), 'templates'),
++        os.path.join(os.path.dirname(upath(__file__)), 'templates'),
+     ),
+     LANGUAGE_CODE='en',
+     LANGUAGES=(
+diff --git a/tests/regressiontests/i18n/tests.py b/tests/regressiontests/i18n/tests.py
+index 2e0c097..dcc288e 100644
+--- a/tests/regressiontests/i18n/tests.py
++++ b/tests/regressiontests/i18n/tests.py
+@@ -18,6 +18,7 @@ from django.utils.formats import (get_format, date_format, time_format,
+     number_format)
+ from django.utils.importlib import import_module
+ from django.utils.numberformat import format as nformat
++from django.utils._os import upath
+ from django.utils.safestring import mark_safe, SafeBytes, SafeString, SafeText
+ from django.utils import six
+ from django.utils.six import PY3
+@@ -44,7 +45,7 @@ from .patterns.tests import (URLRedirectWithoutTrailingSlashTests,
+     URLPrefixTests, URLResponseTests, URLRedirectTests, PathUnusedTests)
+ 
+ 
+-here = os.path.dirname(os.path.abspath(__file__))
++here = os.path.dirname(os.path.abspath(upath(__file__)))
+ extended_locale_paths = settings.LOCALE_PATHS + (
+     os.path.join(here, 'other', 'locale'),
+ )
+@@ -666,8 +667,8 @@ class FormattingTests(TestCase):
+         with self.settings(USE_L10N=True,
+                 FORMAT_MODULE_PATH='regressiontests.i18n.other.locale'):
+             with translation.override('de', deactivate=True):
+-                old = "%r" % get_format_modules(reverse=True)
+-                new = "%r" % get_format_modules(reverse=True) # second try
++                old = str("%r") % get_format_modules(reverse=True)
++                new = str("%r") % get_format_modules(reverse=True) # second try
+                 self.assertEqual(new, old, 'Value returned by get_formats_modules() must be preserved between calls.')
+ 
+     def test_localize_templatetag_and_filter(self):
+diff --git a/tests/regressiontests/logging_tests/tests.py b/tests/regressiontests/logging_tests/tests.py
+index 19ee06e..07804eb 100644
+--- a/tests/regressiontests/logging_tests/tests.py
++++ b/tests/regressiontests/logging_tests/tests.py
+@@ -9,6 +9,7 @@ from django.conf import compat_patch_logging_config, LazySettings
+ from django.core import mail
+ from django.test import TestCase, RequestFactory
+ from django.test.utils import override_settings
++from django.utils.encoding import force_text
+ from django.utils.log import CallbackFilter, RequireDebugFalse
+ from django.utils.six import StringIO
+ from django.utils.unittest import skipUnless
+@@ -154,13 +155,13 @@ class WarningLoggerTests(TestCase):
+         output = StringIO()
+         self.logger.handlers[0].stream = output
+         warnings.warn('Foo Deprecated', DeprecationWarning)
+-        self.assertTrue('Foo Deprecated' in output.getvalue())
++        self.assertTrue('Foo Deprecated' in force_text(output.getvalue()))
+ 
+     def test_warnings_capture_debug_false(self):
+         output = StringIO()
+         self.logger.handlers[0].stream = output
+         warnings.warn('Foo Deprecated', DeprecationWarning)
+-        self.assertFalse('Foo Deprecated' in output.getvalue())
++        self.assertFalse('Foo Deprecated' in force_text(output.getvalue()))
+ 
+ 
+ class CallbackFilterTest(TestCase):
+diff --git a/tests/regressiontests/model_fields/imagefield.py b/tests/regressiontests/model_fields/imagefield.py
+index 7446f22..df0215d 100644
+--- a/tests/regressiontests/model_fields/imagefield.py
++++ b/tests/regressiontests/model_fields/imagefield.py
+@@ -6,6 +6,7 @@ import shutil
+ from django.core.files import File
+ from django.core.files.images import ImageFile
+ from django.test import TestCase
++from django.utils._os import upath
+ from django.utils.unittest import skipIf
+ 
+ from .models import Image
+@@ -43,10 +44,10 @@ class ImageFieldTestMixin(object):
+             shutil.rmtree(temp_storage_dir)
+         os.mkdir(temp_storage_dir)
+ 
+-        file_path1 = os.path.join(os.path.dirname(__file__), "4x8.png")
++        file_path1 = os.path.join(os.path.dirname(upath(__file__)), "4x8.png")
+         self.file1 = self.File(open(file_path1, 'rb'))
+ 
+-        file_path2 = os.path.join(os.path.dirname(__file__), "8x4.png")
++        file_path2 = os.path.join(os.path.dirname(upath(__file__)), "8x4.png")
+         self.file2 = self.File(open(file_path2, 'rb'))
+ 
+     def tearDown(self):
+diff --git a/tests/regressiontests/model_forms_regress/models.py b/tests/regressiontests/model_forms_regress/models.py
+index f6e08d2..2c2fd39 100644
+--- a/tests/regressiontests/model_forms_regress/models.py
++++ b/tests/regressiontests/model_forms_regress/models.py
+@@ -5,6 +5,7 @@ import os
+ from django.core.exceptions import ValidationError
+ from django.db import models
+ from django.utils.encoding import python_2_unicode_compatible
++from django.utils._os import upath
+ 
+ 
+ class Person(models.Model):
+@@ -19,7 +20,7 @@ class Triple(models.Model):
+         unique_together = (('left', 'middle'), ('middle', 'right'))
+ 
+ class FilePathModel(models.Model):
+-    path = models.FilePathField(path=os.path.dirname(__file__), match=".*\.py$", blank=True)
++    path = models.FilePathField(path=os.path.dirname(upath(__file__)), match=".*\.py$", blank=True)
+ 
+ @python_2_unicode_compatible
+ class Publication(models.Model):
+diff --git a/tests/regressiontests/servers/tests.py b/tests/regressiontests/servers/tests.py
+index f54e34c..1a7552e 100644
+--- a/tests/regressiontests/servers/tests.py
++++ b/tests/regressiontests/servers/tests.py
+@@ -15,11 +15,12 @@ from django.test import LiveServerTestCase
+ from django.core.servers.basehttp import WSGIServerException
+ from django.test.utils import override_settings
+ from django.utils.http import urlencode
++from django.utils._os import upath
+ 
+ from .models import Person
+ 
+ 
+-TEST_ROOT = os.path.dirname(__file__)
++TEST_ROOT = os.path.dirname(upath(__file__))
+ TEST_SETTINGS = {
+     'MEDIA_URL': '/media/',
+     'MEDIA_ROOT': os.path.join(TEST_ROOT, 'media'),
+diff --git a/tests/regressiontests/staticfiles_tests/tests.py b/tests/regressiontests/staticfiles_tests/tests.py
+index 0c8e7db..90c8621 100644
+--- a/tests/regressiontests/staticfiles_tests/tests.py
++++ b/tests/regressiontests/staticfiles_tests/tests.py
+@@ -15,14 +15,14 @@ from django.core.exceptions import ImproperlyConfigured
+ from django.core.management import call_command
+ from django.test import TestCase
+ from django.test.utils import override_settings
+-from django.utils.encoding import smart_text
++from django.utils.encoding import force_text
+ from django.utils.functional import empty
+-from django.utils._os import rmtree_errorhandler
++from django.utils._os import rmtree_errorhandler, upath
+ from django.utils import six
+ 
+ from django.contrib.staticfiles import finders, storage
+ 
+-TEST_ROOT = os.path.dirname(__file__)
++TEST_ROOT = os.path.dirname(upath(__file__))
+ TEST_SETTINGS = {
+     'DEBUG': True,
+     'MEDIA_URL': '/media/',
+@@ -77,7 +77,7 @@ class BaseStaticFilesTestCase(object):
+         os.unlink(self._backup_filepath)
+ 
+     def assertFileContains(self, filepath, text):
+-        self.assertIn(text, self._get_file(smart_text(filepath)),
++        self.assertIn(text, self._get_file(force_text(filepath)),
+                         "'%s' not in '%s'" % (text, filepath))
+ 
+     def assertFileNotFound(self, filepath):
+@@ -195,7 +195,7 @@ class TestFindStatic(CollectionTestCase, TestDefaults):
+         call_command('findstatic', filepath, all=False, verbosity=0, stdout=out)
+         out.seek(0)
+         lines = [l.strip() for l in out.readlines()]
+-        with codecs.open(smart_text(lines[1].strip()), "r", "utf-8") as f:
++        with codecs.open(force_text(lines[1].strip()), "r", "utf-8") as f:
+             return f.read()
+ 
+     def test_all_files(self):
+@@ -207,8 +207,8 @@ class TestFindStatic(CollectionTestCase, TestDefaults):
+         out.seek(0)
+         lines = [l.strip() for l in out.readlines()]
+         self.assertEqual(len(lines), 3)  # three because there is also the "Found <file> here" line
+-        self.assertIn('project', lines[1])
+-        self.assertIn('apps', lines[2])
++        self.assertIn('project', force_text(lines[1]))
++        self.assertIn('apps', force_text(lines[2]))
+ 
+ 
+ class TestCollection(CollectionTestCase, TestDefaults):
+diff --git a/tests/regressiontests/templates/loaders.py b/tests/regressiontests/templates/loaders.py
+index 7fbb084..b779652 100644
+--- a/tests/regressiontests/templates/loaders.py
++++ b/tests/regressiontests/templates/loaders.py
+@@ -18,6 +18,7 @@ from django.template import TemplateDoesNotExist, Context
+ from django.template.loaders.eggs import Loader as EggLoader
+ from django.template import loader
+ from django.utils import unittest, six
++from django.utils._os import upath
+ from django.utils.six import StringIO
+ 
+ 
+@@ -111,9 +112,9 @@ class CachedLoader(unittest.TestCase):
+     def test_templatedir_caching(self):
+         "Check that the template directories form part of the template cache key. Refs #13573"
+         # Retrive a template specifying a template directory to check
+-        t1, name = loader.find_template('test.html', (os.path.join(os.path.dirname(__file__), 'templates', 'first'),))
++        t1, name = loader.find_template('test.html', (os.path.join(os.path.dirname(upath(__file__)), 'templates', 'first'),))
+         # Now retrieve the same template name, but from a different directory
+-        t2, name = loader.find_template('test.html', (os.path.join(os.path.dirname(__file__), 'templates', 'second'),))
++        t2, name = loader.find_template('test.html', (os.path.join(os.path.dirname(upath(__file__)), 'templates', 'second'),))
+ 
+         # The two templates should not have the same content
+         self.assertNotEqual(t1.render(Context({})), t2.render(Context({})))
+@@ -123,7 +124,7 @@ class RenderToStringTest(unittest.TestCase):
+     def setUp(self):
+         self._old_TEMPLATE_DIRS = settings.TEMPLATE_DIRS
+         settings.TEMPLATE_DIRS = (
+-            os.path.join(os.path.dirname(__file__), 'templates'),
++            os.path.join(os.path.dirname(upath(__file__)), 'templates'),
+         )
+ 
+     def tearDown(self):
+diff --git a/tests/regressiontests/templates/response.py b/tests/regressiontests/templates/response.py
+index a2a76a3..c4da50a 100644
+--- a/tests/regressiontests/templates/response.py
++++ b/tests/regressiontests/templates/response.py
+@@ -11,6 +11,7 @@ from django.template import Template, Context
+ from django.template.response import (TemplateResponse, SimpleTemplateResponse,
+                                       ContentNotRenderedError)
+ from django.test.utils import override_settings
++from django.utils._os import upath
+ 
+ def test_processor(request):
+     return {'processors': 'yes'}
+@@ -206,7 +207,7 @@ class SimpleTemplateResponseTest(TestCase):
+ 
+ @override_settings(
+     TEMPLATE_CONTEXT_PROCESSORS=[test_processor_name],
+-    TEMPLATE_DIRS=(os.path.join(os.path.dirname(__file__),'templates')),
++    TEMPLATE_DIRS=(os.path.join(os.path.dirname(upath(__file__)), 'templates')),
+ )
+ class TemplateResponseTest(TestCase):
+ 
+diff --git a/tests/regressiontests/templates/tests.py b/tests/regressiontests/templates/tests.py
+index 65d6e72..9ec487d 100644
+--- a/tests/regressiontests/templates/tests.py
++++ b/tests/regressiontests/templates/tests.py
+@@ -30,6 +30,7 @@ from django.test.utils import (setup_test_template_loader,
+ from django.utils import unittest
+ from django.utils.encoding import python_2_unicode_compatible
+ from django.utils.formats import date_format
++from django.utils._os import upath
+ from django.utils.translation import activate, deactivate, ugettext as _
+ from django.utils.safestring import mark_safe
+ from django.utils import six
+@@ -423,7 +424,7 @@ class Templates(TestCase):
+         # Set ALLOWED_INCLUDE_ROOTS so that ssi works.
+         old_allowed_include_roots = settings.ALLOWED_INCLUDE_ROOTS
+         settings.ALLOWED_INCLUDE_ROOTS = (
+-            os.path.dirname(os.path.abspath(__file__)),
++            os.path.dirname(os.path.abspath(upath(__file__))),
+         )
+ 
+         # Warm the URL reversing cache. This ensures we don't pay the cost
+@@ -514,7 +515,7 @@ class Templates(TestCase):
+     def get_template_tests(self):
+         # SYNTAX --
+         # 'template_name': ('template contents', 'context dict', 'expected string output' or Exception class)
+-        basedir = os.path.dirname(os.path.abspath(__file__))
++        basedir = os.path.dirname(os.path.abspath(upath(__file__)))
+         tests = {
+             ### BASIC SYNTAX ################################################
+ 
+@@ -1649,7 +1650,7 @@ class TemplateTagLoading(unittest.TestCase):
+     def setUp(self):
+         self.old_path = sys.path[:]
+         self.old_apps = settings.INSTALLED_APPS
+-        self.egg_dir = '%s/eggs' % os.path.dirname(__file__)
++        self.egg_dir = '%s/eggs' % os.path.dirname(upath(__file__))
+         self.old_tag_modules = template_base.templatetags_modules
+         template_base.templatetags_modules = []
+ 
+diff --git a/tests/regressiontests/test_client_regress/tests.py b/tests/regressiontests/test_client_regress/tests.py
+index f424321..5ba5d3c 100644
+--- a/tests/regressiontests/test_client_regress/tests.py
++++ b/tests/regressiontests/test_client_regress/tests.py
+@@ -16,12 +16,13 @@ from django.test import Client, TestCase
+ from django.test.client import encode_file, RequestFactory
+ from django.test.utils import ContextList, override_settings, str_prefix
+ from django.template.response import SimpleTemplateResponse
++from django.utils._os import upath
+ from django.utils.translation import ugettext_lazy
+ from django.http import HttpResponse
+ 
+ 
+ @override_settings(
+-    TEMPLATE_DIRS=(os.path.join(os.path.dirname(__file__), 'templates'),)
++    TEMPLATE_DIRS=(os.path.join(os.path.dirname(upath(__file__)), 'templates'),)
+ )
+ class AssertContainsTests(TestCase):
+     def test_contains(self):
+@@ -629,7 +630,7 @@ class TemplateExceptionTests(TestCase):
+                     template_loader.reset()
+ 
+     @override_settings(
+-        TEMPLATE_DIRS=(os.path.join(os.path.dirname(__file__), 'bad_templates'),)
++        TEMPLATE_DIRS=(os.path.join(os.path.dirname(upath(__file__)), 'bad_templates'),)
+     )
+     def test_bad_404_template(self):
+         "Errors found when rendering 404 error templates are re-raised"
+diff --git a/tests/regressiontests/urlpatterns_reverse/tests.py b/tests/regressiontests/urlpatterns_reverse/tests.py
+index 85f18db..eb3afe8 100644
+--- a/tests/regressiontests/urlpatterns_reverse/tests.py
++++ b/tests/regressiontests/urlpatterns_reverse/tests.py
+@@ -237,7 +237,7 @@ class ResolverTests(unittest.TestCase):
+             self.assertEqual(len(e.args[0]['tried']), len(url_types_names), 'Wrong number of tried URLs returned.  Expected %s, got %s.' % (len(url_types_names), len(e.args[0]['tried'])))
+             for tried, expected in zip(e.args[0]['tried'], url_types_names):
+                 for t, e in zip(tried, expected):
+-                    self.assertTrue(isinstance(t, e['type']), '%s is not an instance of %s' % (t, e['type']))       ##########################isinstance
++                    self.assertTrue(isinstance(t, e['type']), str('%s is not an instance of %s') % (t, e['type']))       ##########################isinstance
+                     if 'name' in e:
+                         if not e['name']:
+                             self.assertTrue(t.name is None, 'Expected no URL name but found %s.' % t.name)
+diff --git a/tests/regressiontests/utils/archive.py b/tests/regressiontests/utils/archive.py
+index 5575f34..8861b4a 100644
+--- a/tests/regressiontests/utils/archive.py
++++ b/tests/regressiontests/utils/archive.py
+@@ -4,9 +4,10 @@ import tempfile
+ from django.utils import unittest
+ 
+ from django.utils.archive import Archive, extract
++from django.utils._os import upath
+ 
+ 
+-TEST_DIR = os.path.join(os.path.dirname(__file__), 'archives')
++TEST_DIR = os.path.join(os.path.dirname(upath(__file__)), 'archives')
+ 
+ 
+ class ArchiveTester(object):
+diff --git a/tests/regressiontests/utils/module_loading.py b/tests/regressiontests/utils/module_loading.py
+index dffb519..3fc92b0 100644
+--- a/tests/regressiontests/utils/module_loading.py
++++ b/tests/regressiontests/utils/module_loading.py
+@@ -6,6 +6,7 @@ from zipimport import zipimporter
+ from django.utils import unittest
+ from django.utils.importlib import import_module
+ from django.utils.module_loading import module_has_submodule
++from django.utils._os import upath
+ 
+ 
+ class DefaultLoader(unittest.TestCase):
+@@ -50,7 +51,7 @@ class DefaultLoader(unittest.TestCase):
+ class EggLoader(unittest.TestCase):
+     def setUp(self):
+         self.old_path = sys.path[:]
+-        self.egg_dir = '%s/eggs' % os.path.dirname(__file__)
++        self.egg_dir = '%s/eggs' % os.path.dirname(upath(__file__))
+ 
+     def tearDown(self):
+         sys.path = self.old_path
+diff --git a/tests/regressiontests/views/tests/debug.py b/tests/regressiontests/views/tests/debug.py
+index e616d18..4fdaad5 100644
+--- a/tests/regressiontests/views/tests/debug.py
++++ b/tests/regressiontests/views/tests/debug.py
+@@ -14,6 +14,7 @@ from django.core.urlresolvers import reverse
+ from django.test import TestCase, RequestFactory
+ from django.test.utils import (override_settings, setup_test_template_loader,
+     restore_template_loaders)
++from django.utils.encoding import force_text
+ from django.views.debug import ExceptionReporter
+ 
+ from .. import BrokenException, except_args
+@@ -306,15 +307,16 @@ class ExceptionReportTestMixin(object):
+             self.assertEqual(len(mail.outbox), 1)
+             email = mail.outbox[0]
+             # Frames vars are never shown in plain text email reports.
+-            self.assertNotIn('cooked_eggs', email.body)
+-            self.assertNotIn('scrambled', email.body)
+-            self.assertNotIn('sauce', email.body)
+-            self.assertNotIn('worcestershire', email.body)
++            body = force_text(email.body)
++            self.assertNotIn('cooked_eggs', body)
++            self.assertNotIn('scrambled', body)
++            self.assertNotIn('sauce', body)
++            self.assertNotIn('worcestershire', body)
+             if check_for_POST_params:
+                 for k, v in self.breakfast_data.items():
+                     # All POST parameters are shown.
+-                    self.assertIn(k, email.body)
+-                    self.assertIn(v, email.body)
++                    self.assertIn(k, body)
++                    self.assertIn(v, body)
+ 
+     def verify_safe_email(self, view, check_for_POST_params=True):
+         """
+@@ -327,20 +329,21 @@ class ExceptionReportTestMixin(object):
+             self.assertEqual(len(mail.outbox), 1)
+             email = mail.outbox[0]
+             # Frames vars are never shown in plain text email reports.
+-            self.assertNotIn('cooked_eggs', email.body)
+-            self.assertNotIn('scrambled', email.body)
+-            self.assertNotIn('sauce', email.body)
+-            self.assertNotIn('worcestershire', email.body)
++            body = force_text(email.body)
++            self.assertNotIn('cooked_eggs', body)
++            self.assertNotIn('scrambled', body)
++            self.assertNotIn('sauce', body)
++            self.assertNotIn('worcestershire', body)
+             if check_for_POST_params:
+                 for k, v in self.breakfast_data.items():
+                     # All POST parameters' names are shown.
+-                    self.assertIn(k, email.body)
++                    self.assertIn(k, body)
+                 # Non-sensitive POST parameters' values are shown.
+-                self.assertIn('baked-beans-value', email.body)
+-                self.assertIn('hash-brown-value', email.body)
++                self.assertIn('baked-beans-value', body)
++                self.assertIn('hash-brown-value', body)
+                 # Sensitive POST parameters' values are not shown.
+-                self.assertNotIn('sausage-value', email.body)
+-                self.assertNotIn('bacon-value', email.body)
++                self.assertNotIn('sausage-value', body)
++                self.assertNotIn('bacon-value', body)
+ 
+     def verify_paranoid_email(self, view):
+         """
+@@ -353,15 +356,16 @@ class ExceptionReportTestMixin(object):
+             self.assertEqual(len(mail.outbox), 1)
+             email = mail.outbox[0]
+             # Frames vars are never shown in plain text email reports.
+-            self.assertNotIn('cooked_eggs', email.body)
+-            self.assertNotIn('scrambled', email.body)
+-            self.assertNotIn('sauce', email.body)
+-            self.assertNotIn('worcestershire', email.body)
++            body = force_text(email.body)
++            self.assertNotIn('cooked_eggs', body)
++            self.assertNotIn('scrambled', body)
++            self.assertNotIn('sauce', body)
++            self.assertNotIn('worcestershire', body)
+             for k, v in self.breakfast_data.items():
+                 # All POST parameters' names are shown.
+-                self.assertIn(k, email.body)
++                self.assertIn(k, body)
+                 # No POST parameters' values are shown.
+-                self.assertNotIn(v, email.body)
++                self.assertNotIn(v, body)
+ 
+ 
+ class ExceptionReporterFilterTests(TestCase, ExceptionReportTestMixin):
+diff --git a/tests/regressiontests/views/tests/i18n.py b/tests/regressiontests/views/tests/i18n.py
+index 671becb..f1f5b17 100644
+--- a/tests/regressiontests/views/tests/i18n.py
++++ b/tests/regressiontests/views/tests/i18n.py
+@@ -9,6 +9,7 @@ from django.core.urlresolvers import reverse
+ from django.test import LiveServerTestCase, TestCase
+ from django.test.utils import override_settings
+ from django.utils import six, unittest
++from django.utils._os import upath
+ from django.utils.translation import override
+ from django.utils.text import javascript_quote
+ 
+@@ -152,7 +153,7 @@ class JsI18NTestsMultiPackage(TestCase):
+     def testI18NWithLocalePaths(self):
+         extended_locale_paths = settings.LOCALE_PATHS + (
+             path.join(path.dirname(
+-                path.dirname(path.abspath(__file__))), 'app3', 'locale'),)
++                path.dirname(path.abspath(upath(__file__)))), 'app3', 'locale'),)
+         with self.settings(LANGUAGE_CODE='es-ar', LOCALE_PATHS=extended_locale_paths):
+             with override('es-ar'):
+                 response = self.client.get('/views/jsi18n/')
+diff --git a/tests/regressiontests/views/urls.py b/tests/regressiontests/views/urls.py
+index ae3b9c0..2c06557 100644
+--- a/tests/regressiontests/views/urls.py
++++ b/tests/regressiontests/views/urls.py
+@@ -4,11 +4,12 @@ from __future__ import absolute_import
+ from os import path
+ 
+ from django.conf.urls import patterns, url, include
++from django.utils._os import upath
+ 
+ from . import views
+ 
+ 
+-base_dir = path.dirname(path.abspath(__file__))
++base_dir = path.dirname(path.abspath(upath(__file__)))
+ media_dir = path.join(base_dir, 'media')
+ locale_dir = path.join(base_dir, 'locale')
+ 
+diff --git a/tests/runtests.py b/tests/runtests.py
+index 90e2dc2..8c56e27 100755
+--- a/tests/runtests.py
++++ b/tests/runtests.py
+@@ -7,6 +7,7 @@ import tempfile
+ import warnings
+ 
+ from django import contrib
++from django.utils._os import upath
+ from django.utils import six
+ 
+ # databrowse is deprecated, but we still want to run its tests
+@@ -19,8 +20,8 @@ REGRESSION_TESTS_DIR_NAME = 'regressiontests'
+ 
+ TEST_TEMPLATE_DIR = 'templates'
+ 
+-RUNTESTS_DIR = os.path.dirname(__file__)
+-CONTRIB_DIR = os.path.dirname(contrib.__file__)
++RUNTESTS_DIR = os.path.dirname(upath(__file__))
++CONTRIB_DIR = os.path.dirname(upath(contrib.__file__))
+ MODEL_TEST_DIR = os.path.join(RUNTESTS_DIR, MODEL_TESTS_DIR_NAME)
+ REGRESSION_TEST_DIR = os.path.join(RUNTESTS_DIR, REGRESSION_TESTS_DIR_NAME)
+ TEMP_DIR = tempfile.mkdtemp(prefix='django_')
+@@ -192,7 +193,7 @@ def bisect_tests(bisection_label, options, test_labels):
+             pass
+ 
+     subprocess_args = [
+-        sys.executable, __file__, '--settings=%s' % options.settings]
++        sys.executable, upath(__file__), '--settings=%s' % options.settings]
+     if options.failfast:
+         subprocess_args.append('--failfast')
+     if options.verbosity:
+@@ -253,7 +254,7 @@ def paired_tests(paired_test, options, test_labels):
+             pass
+ 
+     subprocess_args = [
+-        sys.executable, __file__, '--settings=%s' % options.settings]
++        sys.executable, upath(__file__), '--settings=%s' % options.settings]
+     if options.failfast:
+         subprocess_args.append('--failfast')
+     if options.verbosity:
+

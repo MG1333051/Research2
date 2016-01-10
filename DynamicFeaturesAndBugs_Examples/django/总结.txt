@@ -1,5 +1,5 @@
-2626
-1，中一些地方在修复后把原来用getattr(value, 'tzinfo', None)代码的部分，用了
+django26262626
+1，在修复后把原来用getattr(value, 'tzinfo', None)代码的部分，用了
 其他函数代替
 如：
 -        if getattr(value, 'tzinfo', None) is not None:              ########################################getattr
